@@ -5,6 +5,28 @@ reasoning.
 
 ## Done
 
+### 2026-09-06 — isolation is per provider, and failures are answerable
+
+Two changes, and the first is a defect that could only be seen once a second plugin existed. The
+`ServiceLoader` pass was one `for` inside one `try`, so **the first provider that would not load ended the
+iteration** and every plugin declared after it was silently absent. The comment above that loop said the
+opposite — *"a `ServiceConfigurationError` is thrown lazily, per provider, so one plugin that will not
+instantiate must not cost the rest"* — which is true of when the error is *thrown* and says nothing about
+who catches it.
+
+Each provider is now advanced and constructed in its own `try`, at **two** moments that are not the same
+moment: `Class.forName` runs while the iterator advances, which is where a missing superclass throws
+`NoClassDefFoundError` (the shape of the non-transitive toolkit, 2026-08-28), and the no-arg constructor
+runs in `Provider.get()`, which is where a constructor that links an `optional` dependency throws (the shape
+SDK v1.1.5 shipped). The iterator continues after either — verified rather than assumed, by a fixture that
+declares a broken provider **first** and a working one after it.
+
+`openReporting` returns `Loaded(loader, failures)`; `open` is the same pass with the failures dropped and
+keeps its contract unchanged, `null` when nothing loaded, so every host still falls back to its bundled set.
+The point is one sentence that appears three times in this project's incident record — *an empty palette and
+one line on stderr*. Catching a broken plugin is right; being unable to name it is what left three releases
+looking like "the project has no plugins".
+
 ### 2026-09-02 — JDK 25 LTS
 
 `jitpack.yml` → `openjdk25`, the pom to `maven.compiler.release` 25, CI to `java-version: '25'`. Nothing in

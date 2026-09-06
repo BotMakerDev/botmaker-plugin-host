@@ -8,6 +8,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
@@ -75,6 +76,44 @@ public final class PluginLoader implements Closeable {
     }
 
     /**
+     * One plugin that did not load, and why.
+     *
+     * <p>The cause is kept whole rather than rendered, because the two readers want different amounts of it:
+     * a dialog wants one line, a {@code --verbose} CLI wants the stack. {@link #describe()} is the one line.
+     *
+     * @param provider the implementation class named by the services file, or a description of the failure
+     *                 when the name is what could not be read
+     */
+    public record PluginFailure(String provider, Throwable cause) {
+
+        public PluginFailure {
+            provider = provider == null || provider.isBlank() ? "a plugin" : provider;
+        }
+
+        /** {@code <provider> — <the cause's own message>}, which is what a user is shown. */
+        public String describe() {
+            String message = cause == null ? "" : cause.getMessage();
+            return provider + " — "
+                    + (message == null || message.isBlank()
+                    ? (cause == null ? "did not load" : cause.getClass().getSimpleName())
+                    : message);
+        }
+    }
+
+    /**
+     * What {@link #openReporting} answers: the loader, and everything that did not load.
+     *
+     * <p>They are separate because they fail separately — a classpath can produce two working plugins and one
+     * broken one, and before 2026-09-06 that state produced <em>zero</em> plugins and one line on stderr.
+     */
+    public record Loaded(PluginLoader loader, List<PluginFailure> failures) {
+
+        public Loaded {
+            failures = List.copyOf(failures);
+        }
+    }
+
+    /**
      * Loads every plugin declared on {@code classpath}, or {@code null} when there is nothing to load or
      * nothing loadable.
      *
@@ -82,34 +121,74 @@ public final class PluginLoader implements Closeable {
      * project whose classpath resolved to nothing must get the bundled menus rather than none. Every failure
      * here is one of those — an unresolvable pin, a jar with no services file, a plugin whose constructor
      * throws — and each is logged and answered the same way.
+     *
+     * <p>Use {@link #openReporting} where the failures are worth telling somebody about; this is the same
+     * pass with them dropped.
      */
     public static PluginLoader open(List<String> classpath) {
-        if (classpath == null || classpath.isEmpty()) return null;
+        return openReporting(classpath).loader();
+    }
+
+    /**
+     * {@link #open}, and what did not load beside it.
+     *
+     * <h2>Isolation is per provider, and until 2026-09-06 it was per classpath</h2>
+     *
+     * <p>The loop used to be one {@code for} over {@link ServiceLoader} inside one {@code try}, so the first
+     * provider that would not load <b>ended the iteration</b> and every plugin after it in the services file
+     * was silently absent. With one plugin in the world that was invisible; with two it is the difference
+     * between "the SDK is broken" and "nothing works".
+     *
+     * <p>So the failure is caught in two places, because a plugin can fail at two moments and they are not
+     * the same moment. <b>Advancing the iterator</b> is where {@code Class.forName} runs, which is where a
+     * missing superclass throws {@link NoClassDefFoundError} — the ordinary shape of a plugin whose own
+     * dependency is not on the classpath. <b>{@code Provider.get()}</b> is where the no-arg constructor runs,
+     * which is where a constructor that links an {@code optional} dependency throws — the shape that shipped
+     * as SDK v1.1.5. The iterator keeps going after either.
+     *
+     * <p>{@code LinkageError} rather than {@code Error}: a broken plugin must not make an
+     * {@link OutOfMemoryError} look like a missing services file.
+     */
+    public static Loaded openReporting(List<String> classpath) {
+        if (classpath == null || classpath.isEmpty()) return new Loaded(null, List.of());
         URL[] urls = urlsOf(classpath);
-        if (urls.length == 0) return null;
+        if (urls.length == 0) return new Loaded(null, List.of());
 
         URLClassLoader loader = new Inverted(urls, PluginLoader.class.getClassLoader());
         List<StudioPlugin> found = new ArrayList<>();
-        try {
-            // Iterated with an explicit loop rather than stream().toList(): a ServiceConfigurationError is
-            // thrown lazily, per provider, so one plugin that will not instantiate must not cost the rest.
-            for (StudioPlugin plugin : ServiceLoader.load(StudioPlugin.class, loader)) {
-                found.add(plugin);
+        List<PluginFailure> failures = new ArrayList<>();
+
+        Iterator<ServiceLoader.Provider<StudioPlugin>> providers =
+                ServiceLoader.load(StudioPlugin.class, loader).stream().iterator();
+        while (true) {
+            ServiceLoader.Provider<StudioPlugin> provider;
+            try {
+                if (!providers.hasNext()) break;
+                provider = providers.next();
+            } catch (ServiceConfigurationError | LinkageError | RuntimeException e) {
+                // The services file named a class that could not be resolved. ServiceLoader has already
+                // consumed that line, so the next hasNext() reads the next one — which is what makes this a
+                // `continue` rather than a `break`, and what `a_broken_plugin_does_not_cost_the_others`
+                // holds. The provider's own name is inside the error's message; nothing else here has it.
+                failures.add(new PluginFailure(null, e));
+                continue;
             }
-        } catch (ServiceConfigurationError | LinkageError | RuntimeException e) {
-            // LinkageError is not decoration. A plugin whose jar is present but whose OWN dependency is not
-            // — the toolkit missing from a resolved classpath is the ordinary way — fails inside
-            // ServiceLoader's Class.forName as a NoClassDefFoundError, which is an Error and would
-            // otherwise leave here and abort whatever the host was doing: opening a project.
-            // Deliberately not `Error`: a broken plugin must not make an OutOfMemoryError look like a
-            // missing services file.
-            System.err.println("Warning: could not load plugins from the project classpath: " + e);
+            try {
+                found.add(provider.get());
+            } catch (ServiceConfigurationError | LinkageError | RuntimeException e) {
+                failures.add(new PluginFailure(provider.type().getName(), e));
+            }
+        }
+
+        for (PluginFailure failure : failures) {
+            System.err.println("Warning: could not load a plugin from the project classpath: "
+                    + failure.describe());
         }
         if (found.isEmpty()) {
             close(loader);
-            return null;
+            return new Loaded(null, failures);
         }
-        return new PluginLoader(loader, List.copyOf(found));
+        return new Loaded(new PluginLoader(loader, List.copyOf(found)), failures);
     }
 
     public List<StudioPlugin> plugins() {

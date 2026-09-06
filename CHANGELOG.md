@@ -5,6 +5,27 @@ All notable changes to `botmaker-plugin-host`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
+## [Unreleased]
+
+### Fixed
+
+- **One broken plugin no longer costs a project every other plugin.** The `ServiceLoader` pass was a single
+  `for` inside a single `try`, so the first provider that would not load ended the iteration and every
+  plugin declared after it was silently absent. With one plugin in the world that was invisible; with two it
+  is the difference between *the SDK is broken* and *nothing works*. Each provider is now advanced and
+  constructed inside its own `try` — two moments, because a plugin fails at two: `Class.forName` while the
+  iterator advances (a missing superclass, the shape of a non-transitive toolkit) and the no-arg constructor
+  in `Provider.get()` (a constructor that links an `optional` dependency, the shape SDK v1.1.5 shipped).
+
+### Added
+
+- **`openReporting` answers what did not load, as well as what did.** `Loaded(loader, failures)` with
+  `PluginFailure(provider, cause)`; `open` is that pass with the failures dropped and keeps its contract
+  exactly — `null` when nothing loaded, so a host still falls back to its bundled set. Three incidents in
+  this project's record end with the same words, *an empty palette and one line on stderr*: catching a
+  broken plugin is correct, and being unable to say which one is not. A host can now tell *this project pins
+  no plugin* from *this project pins a plugin that is broken*.
+
 ## [0.0.5] — 2026-09-05
 
 ### Fixed

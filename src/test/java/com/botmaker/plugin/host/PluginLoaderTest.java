@@ -2,6 +2,7 @@ package com.botmaker.plugin.host;
 
 import com.botmaker.plugin.api.StudioPlugin;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 
 import javax.tools.JavaCompiler;
@@ -142,6 +143,116 @@ class PluginLoaderTest {
         Files.writeString(services.resolve("com.botmaker.plugin.api.StudioPlugin"), "p.BrokenPlugin\n");
 
         assertNull(PluginLoader.open(List.of(classes.toString())));
+    }
+
+    // ---- one broken plugin costs only itself ----
+
+    /**
+     * <b>The phase-4 defect, and it was invisible while the world had one plugin.</b> The loop used to be one
+     * {@code for} over {@link java.util.ServiceLoader} inside one {@code try}: the first provider that would
+     * not load ended the iteration, so every plugin declared after it was silently absent. With two plugins
+     * on a classpath that is the difference between <i>the SDK is broken</i> and <i>nothing works</i>.
+     *
+     * <p>The broken one is declared <b>first</b> on purpose — that is the ordering the old code lost the
+     * others on.
+     */
+    @Test
+    @Timeout(30)
+    void a_broken_plugin_does_not_cost_the_others(@TempDir Path dir) throws IOException {
+        Path classes = compileBrokenPlugin(dir);
+        Files.writeString(classes.resolve("META-INF/services/com.botmaker.plugin.api.StudioPlugin"),
+                "p.BrokenPlugin\n" + Stub.class.getName() + "\n");
+
+        PluginLoader.Loaded loaded = PluginLoader.openReporting(List.of(classes.toString()));
+        try (PluginLoader plugins = loaded.loader()) {
+            assertNotNull(plugins, "the working plugin must survive the broken one");
+            assertEquals(List.of("test.stub"), plugins.plugins().stream().map(p -> p.id()).toList());
+            assertEquals(1, loaded.failures().size(), "the broken one must be reported, not swallowed");
+            assertTrue(loaded.failures().get(0).describe().contains("BrokenPlugin"),
+                    loaded.failures().get(0).describe());
+        }
+    }
+
+    /**
+     * The second moment a plugin can fail, and it is a different moment: advancing the iterator runs
+     * {@code Class.forName}, {@code Provider.get()} runs the no-arg constructor. This is the shape that
+     * shipped as SDK v1.1.5 — a constructor that linked an {@code optional} dependency, so every host
+     * without it answered {@code NoClassDefFoundError} while {@code ServiceLoader} was constructing.
+     */
+    @Test
+    @Timeout(30)
+    void a_plugin_whose_constructor_throws_is_reported_and_the_rest_load(@TempDir Path dir)
+            throws IOException {
+        JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
+        assumeTrue(javac != null, "no javac in this JRE");
+
+        Path src = Files.createDirectories(dir.resolve("src/p"));
+        Files.writeString(src.resolve("ThrowingPlugin.java"),
+                "package p; public final class ThrowingPlugin"
+                        + " implements com.botmaker.plugin.api.StudioPlugin {"
+                        + " public ThrowingPlugin() { throw new IllegalStateException(\"no display\"); }"
+                        + " @Override public String id() { return \"p.throwing\"; } }");
+
+        Path classes = Files.createDirectories(dir.resolve("classes"));
+        String contract = StudioPlugin.class.getProtectionDomain().getCodeSource().getLocation().getPath();
+        int status = javac.run(null, null, null, "-cp", contract, "-d", classes.toString(),
+                src.resolve("ThrowingPlugin.java").toString());
+        assumeTrue(status == 0, "could not compile the fixture");
+
+        Path services = Files.createDirectories(classes.resolve("META-INF/services"));
+        Files.writeString(services.resolve("com.botmaker.plugin.api.StudioPlugin"),
+                "p.ThrowingPlugin\n" + Stub.class.getName() + "\n");
+
+        PluginLoader.Loaded loaded = PluginLoader.openReporting(List.of(classes.toString()));
+        try (PluginLoader plugins = loaded.loader()) {
+            assertNotNull(plugins);
+            assertEquals(List.of("test.stub"), plugins.plugins().stream().map(p -> p.id()).toList());
+            assertEquals(1, loaded.failures().size());
+            // Here the provider's own type IS known — it loaded, it just would not construct.
+            assertEquals("p.ThrowingPlugin", loaded.failures().get(0).provider());
+        }
+    }
+
+    /** A classpath nothing loads from still says why, which is the half {@code open} drops. */
+    @Test
+    @Timeout(30)
+    void a_classpath_whose_only_plugin_is_broken_answers_no_loader_and_one_failure(@TempDir Path dir)
+            throws IOException {
+        Path classes = compileBrokenPlugin(dir);
+        Files.writeString(classes.resolve("META-INF/services/com.botmaker.plugin.api.StudioPlugin"),
+                "p.BrokenPlugin\n");
+
+        PluginLoader.Loaded loaded = PluginLoader.openReporting(List.of(classes.toString()));
+
+        assertNull(loaded.loader(), "no plugin loaded, so the caller must fall back to the bundled set");
+        assertEquals(1, loaded.failures().size());
+    }
+
+    /**
+     * A plugin compiled against a superclass whose {@code .class} is then deleted — exactly the state a jar
+     * resolved without its own dependency is in, and how the 2026-08-28 non-transitive toolkit failed.
+     */
+    private static Path compileBrokenPlugin(Path dir) throws IOException {
+        JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
+        assumeTrue(javac != null, "no javac in this JRE");
+
+        Path src = Files.createDirectories(dir.resolve("src/p"));
+        Files.writeString(src.resolve("Helper.java"),
+                "package p; public abstract class Helper { public String name() { return \"broken\"; } }");
+        Files.writeString(src.resolve("BrokenPlugin.java"),
+                "package p; public final class BrokenPlugin extends Helper"
+                        + " implements com.botmaker.plugin.api.StudioPlugin {"
+                        + " @Override public String id() { return name(); } }");
+
+        Path classes = Files.createDirectories(dir.resolve("classes"));
+        String contract = StudioPlugin.class.getProtectionDomain().getCodeSource().getLocation().getPath();
+        int status = javac.run(null, null, null, "-cp", contract, "-d", classes.toString(),
+                src.resolve("Helper.java").toString(), src.resolve("BrokenPlugin.java").toString());
+        assumeTrue(status == 0, "could not compile the fixture");
+
+        Files.delete(classes.resolve("p/Helper.class"));
+        Files.createDirectories(classes.resolve("META-INF/services"));
+        return classes;
     }
 
     @Test
