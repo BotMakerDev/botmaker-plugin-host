@@ -5,6 +5,15 @@ All notable changes to `botmaker-plugin-host`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
+## [Unreleased]
+
+### Fixed
+
+- **A plugin whose superclass is missing is reported by the class that is missing.** `Class.forName` throws
+  a raw `NoClassDefFoundError` naming `p/Helper`, not the provider, and `ServiceLoader` never says which
+  services line it was on — so `PluginFailure.describe()` now reads *a plugin — p/Helper is not on the
+  classpath*. The test that asserted the provider's name was red on `main` since v0.1.0.
+
 ## [0.1.0] — 2026-09-16
 
 ### Fixed

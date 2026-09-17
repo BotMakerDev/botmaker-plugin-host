@@ -90,9 +90,16 @@ public final class PluginLoader implements Closeable {
             provider = provider == null || provider.isBlank() ? "a plugin" : provider;
         }
 
-        /** {@code <provider> — <the cause's own message>}, which is what a user is shown. */
+        /**
+         * {@code <provider> — <the cause's own message>}, which is what a user is shown. A
+         * {@link NoClassDefFoundError} names only the class that was missing, so the line says what that
+         * means: {@code a plugin — p/Helper is not on the classpath}.
+         */
         public String describe() {
             String message = cause == null ? "" : cause.getMessage();
+            if (cause instanceof NoClassDefFoundError && message != null && !message.isBlank()) {
+                return provider + " — " + message + " is not on the classpath";
+            }
             return provider + " — "
                     + (message == null || message.isBlank()
                     ? (cause == null ? "did not load" : cause.getClass().getSimpleName())
@@ -169,7 +176,11 @@ public final class PluginLoader implements Closeable {
                 // The services file named a class that could not be resolved. ServiceLoader has already
                 // consumed that line, so the next hasNext() reads the next one — which is what makes this a
                 // `continue` rather than a `break`, and what `a_broken_plugin_does_not_cost_the_others`
-                // holds. The provider's own name is inside the error's message; nothing else here has it.
+                // holds. Which line it was is not recoverable here: a ServiceConfigurationError names the
+                // provider in its message, but a LinkageError (the provider's superclass missing, which is
+                // the archetype's shape) is thrown raw by Class.forName and names only the class that was
+                // missing — `p/Helper`, not `p.BrokenPlugin`. That is still the thing to fix, so it is
+                // what the failure says.
                 failures.add(new PluginFailure(null, e));
                 continue;
             }

@@ -168,8 +168,10 @@ class PluginLoaderTest {
             assertNotNull(plugins, "the working plugin must survive the broken one");
             assertEquals(List.of("test.stub"), plugins.plugins().stream().map(p -> p.id()).toList());
             assertEquals(1, loaded.failures().size(), "the broken one must be reported, not swallowed");
-            assertTrue(loaded.failures().get(0).describe().contains("BrokenPlugin"),
-                    loaded.failures().get(0).describe());
+            // A missing superclass is a raw NoClassDefFoundError out of Class.forName, which names the
+            // class that was missing and not the provider — ServiceLoader never says which line it was
+            // on. What the user needs to fix is the missing class, so that is what the line names.
+            assertEquals("a plugin — p/Helper is not on the classpath", loaded.failures().get(0).describe());
         }
     }
 
