@@ -22,18 +22,18 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The plugin contract. `provided` scope here — a host declares it itself, because the parent-first arm
       # exists precisely so a contract class is ONE Class object on both sides of the boundary — but the
       # build needs it present.
       - name: Check out botmaker-studio-api
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: LiQiyeDev/botmaker-studio-api
           path: .deps/botmaker-studio-api
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '25'
@@ -62,7 +62,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
