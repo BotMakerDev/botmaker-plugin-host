@@ -30,7 +30,7 @@ jobs:
       - name: Check out botmaker-studio-api
         uses: actions/checkout@v7
         with:
-          repository: LiQiyeDev/botmaker-studio-api
+          repository: BotMakerDev/botmaker-studio-api
           path: .deps/botmaker-studio-api
 
       - uses: actions/setup-java@v6
