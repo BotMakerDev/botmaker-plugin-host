@@ -5,6 +5,25 @@ All notable changes to `botmaker-plugin-host`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
+## [Unreleased]
+
+No source changes since v0.1.6; re-released for updated upstream pins.
+
+### Fixed
+
+- **A plugin whose own dependency is missing says which class is missing again, on JDK 27.** Up to JDK 25
+  `ServiceLoader` let the `NoClassDefFoundError` out of `Class.forName` through raw, so the failure line read
+  `a plugin — p/Helper is not on the classpath`. JDK 27 wraps it in a `ServiceConfigurationError` — which is
+  an improvement, since that one names the provider line the raw error never did — and the line became
+  `Provider p.BrokenPlugin not found`, which tells the user nothing they can act on. `PluginFailure.describe`
+  now looks for the missing class down the cause chain (bounded, cycle-safe) instead of only at the top, so
+  both JDKs print the same line. Loading behaviour is unchanged; only the sentence was lost.
+
+### Changed
+
+- **Recompiled against the contract's new packages** — imports only, no behaviour change. See
+  `botmaker-studio-api`'s changelog for the old → new table.
+
 ## [0.1.6] — 2026-09-21
 
 ### Fixed
