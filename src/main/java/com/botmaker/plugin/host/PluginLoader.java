@@ -94,16 +94,40 @@ public final class PluginLoader implements Closeable {
          * {@code <provider> — <the cause's own message>}, which is what a user is shown. A
          * {@link NoClassDefFoundError} names only the class that was missing, so the line says what that
          * means: {@code a plugin — p/Helper is not on the classpath}.
+         *
+         * <p><b>The missing class is looked for down the cause chain, not only at the top</b> (2026-09-21).
+         * Up to JDK 25 {@code ServiceLoader} let a {@code LinkageError} out of {@code Class.forName} raw, so
+         * the missing superclass <i>was</i> the top exception. From JDK 27 it wraps it in a
+         * {@code ServiceConfigurationError} — which is better, since that one names the provider line the
+         * raw error never said — and the class a user actually has to put back was suddenly two words in a
+         * cause nobody prints. Same line on both.
          */
         public String describe() {
+            NoClassDefFoundError missing = missingClass(cause);
+            if (missing != null) return provider + " — " + missing.getMessage() + " is not on the classpath";
             String message = cause == null ? "" : cause.getMessage();
-            if (cause instanceof NoClassDefFoundError && message != null && !message.isBlank()) {
-                return provider + " — " + message + " is not on the classpath";
-            }
             return provider + " — "
                     + (message == null || message.isBlank()
                     ? (cause == null ? "did not load" : cause.getClass().getSimpleName())
                     : message);
+        }
+
+        /**
+         * The first {@link NoClassDefFoundError} with a message at or under {@code throwable}, or null.
+         *
+         * <p>Bounded and cycle-safe: a cause chain may loop (a {@code Throwable} is allowed to be its own
+         * cause), and a plugin that will not load must not cost the host the thread that was reporting it.
+         */
+        private static NoClassDefFoundError missingClass(Throwable throwable) {
+            for (int depth = 0; throwable != null && depth < 8; depth++) {
+                if (throwable instanceof NoClassDefFoundError error
+                        && error.getMessage() != null && !error.getMessage().isBlank()) {
+                    return error;
+                }
+                Throwable next = throwable.getCause();
+                throwable = next == throwable ? null : next;
+            }
+            return null;
         }
     }
 
@@ -178,9 +202,10 @@ public final class PluginLoader implements Closeable {
                 // `continue` rather than a `break`, and what `a_broken_plugin_does_not_cost_the_others`
                 // holds. Which line it was is not recoverable here: a ServiceConfigurationError names the
                 // provider in its message, but a LinkageError (the provider's superclass missing, which is
-                // the archetype's shape) is thrown raw by Class.forName and names only the class that was
-                // missing — `p/Helper`, not `p.BrokenPlugin`. That is still the thing to fix, so it is
-                // what the failure says.
+                // the archetype's shape) names only the class that was missing — `p/Helper`, not
+                // `p.BrokenPlugin`. That is still the thing to fix, so it is what the failure says, and
+                // PluginFailure.describe reads it wherever the running JDK put it: raw up to JDK 25, inside
+                // a ServiceConfigurationError from JDK 27.
                 failures.add(new PluginFailure(null, e));
                 continue;
             }
