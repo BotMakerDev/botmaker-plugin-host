@@ -5,6 +5,12 @@ reasoning.
 
 ## Done
 
+### 2026-09-23 — `Recordings` asks `freshCall()`
+
+The contract's `PluginType.freshSource()` became `freshCall()`, a `Method`. `Recordings.hasFresh` — whether a
+`@Records` parameter of a declared type can be filled with a fresh one — asks it instead; nothing else here
+read the text.
+
 ### 2026-09-23 — `Recordings`: which call writes each recorded gesture
 
 The contract's `@Records` marks a plugin method as the way a gesture is written down. `Recordings.of` finds

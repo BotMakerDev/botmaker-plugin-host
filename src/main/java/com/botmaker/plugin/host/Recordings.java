@@ -169,7 +169,7 @@ public final class Recordings {
             for (PluginType<?> type : safe(plugin::types)) {
                 if (type.type() == null || !type.type().getName().equals(name)) continue;
                 try {
-                    if (type.freshSource() != null || type.fresh() != null) return true;
+                    if (type.freshCall() != null || type.fresh() != null) return true;
                 } catch (RuntimeException | LinkageError e) {
                     return false;
                 }
