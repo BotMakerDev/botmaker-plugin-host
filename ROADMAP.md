@@ -5,6 +5,14 @@ reasoning.
 
 ## Done
 
+### 2026-09-23 — `Recordings`: which call writes each recorded gesture
+
+The contract's `@Records` marks a plugin method as the way a gesture is written down. `Recordings.of` finds
+them on the classes `Palettes` discovers and classifies each parameter once, by the first rule of `Records`
+that fits; a method with a parameter no rule covers is never a writer, and `problems` says why. Types are
+matched by name, not `Class` identity. Studio (`plugin/record/`) records with it; the CLI's `records` check
+uses `problems`, so a plugin that validates is one Studio can record with.
+
 ### 2026-09-23 — `Palettes`: the host discovers a plugin's palette
 
 `Palettes.of(plugin)` answers the plugin's own `catalog()` when it built one, and otherwise catalogues every

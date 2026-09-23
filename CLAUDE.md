@@ -8,10 +8,11 @@ against, and `../docs/refactor/24-plugin-platform.md` for why any of it exists.
 
 ## What this module is, and what it is not
 
-It is **two classes**: `PluginLoader`, and `Palettes` (2026-09-23), the host's reading of a plugin's
+It is **three classes**: `PluginLoader`; `Palettes` (2026-09-23), the host's reading of a plugin's
 palette — its hand-built `catalog()`, or every `@Palette` class found in the plugin's own jar when
-`catalog()` is the empty default. Discovery lives here because every host (Studio, `botmaker plugin
-validate`, the registry's CI) must discover the same palette, and the contract holds no implementation. The
+`catalog()` is the empty default; and `Recordings` (2026-09-23), the `@Records` methods on those classes, each
+with how the host fills every parameter. Discovery lives here because every host (Studio, `botmaker plugin
+validate`, the registry's CI) must read the same answer, and the contract holds no implementation. The
 three plugin-facing modules are three different relationships and the fastest way to keep them straight is
 by who depends on which:
 
@@ -64,7 +65,7 @@ one thing that can make that false. So this module refuses to supply one, and a 
 ## Building
 
 ```bash
-mvn test        # PluginLoaderTest, PalettesTest (16)
+mvn test        # PluginLoaderTest, PalettesTest, RecordingsTest (19)
 mvn install     # com.github.LiQiyeDev:botmaker-plugin-host:0.0.0-SNAPSHOT
 ```
 

@@ -12,6 +12,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **`Palettes`**: a plugin's palette as a host reads it. `Palettes.of(plugin)` is the plugin's own
   `catalog()` when it builds one, and otherwise every `@Palette` class in the jar the plugin was loaded from,
   found without loading or linking anything else. A plugin no longer lists its palette classes.
+- **`Recordings`**: the `@Records` methods of a set of plugins, found on their palette classes, each with how
+  a recording fills every parameter (a plugin's `RecordedValue`, a number, a numeric component type, text, a
+  key enum, a fresh value). `Recordings.problems` names a method that is not `public static` or has a
+  parameter nothing fills; Studio records with `of`, `botmaker plugin validate` checks with `problems`.
 
 ### Fixed
 
