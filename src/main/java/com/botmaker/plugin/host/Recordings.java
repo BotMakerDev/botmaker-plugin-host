@@ -154,6 +154,8 @@ public final class Recordings {
             }
             for (ComponentType<?> component : candidates) {
                 if (component.type() == null || !component.type().getName().equals(name)) continue;
+                // A chain on part 0 is read, never written, so it is no way to write a recorded value down.
+                if (receiver(component)) continue;
                 List<Class<?>> parts = component.componentTypes();
                 if (!parts.isEmpty() && parts.stream().allMatch(p -> p == int.class || p == long.class
                         || p == double.class)) {
@@ -162,6 +164,15 @@ public final class Recordings {
             }
         }
         return Optional.empty();
+    }
+
+    /** Whether the component's factory is an instance method, or asking for it threw. */
+    private static boolean receiver(ComponentType<?> component) {
+        try {
+            return component.factory() instanceof Method method && !Modifier.isStatic(method.getModifiers());
+        } catch (RuntimeException | LinkageError e) {
+            return true;
+        }
     }
 
     private static boolean hasFresh(String name, List<StudioPlugin> plugins) {

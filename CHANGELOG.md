@@ -29,6 +29,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- **`Recordings` never picks an instance-method factory to write a recorded value.** A chain on part 0
+  (`Precision.TIGHT.minArea(400)`) is something the host reads, not a way to write a value down.
 - **Recompiled against the contract's new packages** — imports only, no behaviour change. See
   `botmaker-studio-api`'s changelog for the old → new table.
 
