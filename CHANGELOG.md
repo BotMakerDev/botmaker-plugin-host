@@ -5,6 +5,37 @@ All notable changes to `botmaker-plugin-host`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
+## [Unreleased]
+
+No source changes since v0.1.7; re-released for updated upstream pins.
+
+### Added
+
+- **`Palettes`**: a plugin's palette as a host reads it. `Palettes.of(plugin)` is the plugin's own
+  `catalog()` when it builds one, and otherwise every `@Palette` class in the jar the plugin was loaded from,
+  found without loading or linking anything else. A plugin no longer lists its palette classes.
+- **`Recordings`**: the `@Records` methods of a set of plugins, found on their palette classes, each with how
+  a recording fills every parameter (a plugin's `RecordedValue`, a number, a numeric component type, text, a
+  key enum, a fresh value). `Recordings.problems` names a method that is not `public static` or has a
+  parameter nothing fills; Studio records with `of`, `botmaker plugin validate` checks with `problems`.
+
+### Fixed
+
+- **A plugin whose own dependency is missing says which class is missing again, on JDK 27.** Up to JDK 25
+  `ServiceLoader` let the `NoClassDefFoundError` out of `Class.forName` through raw, so the failure line read
+  `a plugin — p/Helper is not on the classpath`. JDK 27 wraps it in a `ServiceConfigurationError` — which is
+  an improvement, since that one names the provider line the raw error never did — and the line became
+  `Provider p.BrokenPlugin not found`, which tells the user nothing they can act on. `PluginFailure.describe`
+  now looks for the missing class down the cause chain (bounded, cycle-safe) instead of only at the top, so
+  both JDKs print the same line. Loading behaviour is unchanged; only the sentence was lost.
+
+### Changed
+
+- **`Recordings` never picks an instance-method factory to write a recorded value.** A chain on part 0
+  (`Precision.TIGHT.minArea(400)`) is something the host reads, not a way to write a value down.
+- **Recompiled against the contract's new packages** — imports only, no behaviour change. See
+  `botmaker-studio-api`'s changelog for the old → new table.
+
 ## [0.1.7] — 2026-09-23
 
 ### Added
