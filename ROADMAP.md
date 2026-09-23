@@ -5,6 +5,20 @@ reasoning.
 
 ## Done
 
+### 2026-09-23 — `Palettes`: the host discovers a plugin's palette
+
+`Palettes.of(plugin)` answers the plugin's own `catalog()` when it built one, and otherwise catalogues every
+`@Palette` class in the jar (or class directory) the plugin was loaded from. Studio's `PluginHost` and the
+CLI's `PluginValidator` both call it, so the palette a user sees is the palette `validate` judged.
+
+- **Only the plugin's own location is read.** A class another jar annotates is that jar's plugin's.
+- **Nothing is linked.** Each class file is searched for the `@Palette` descriptor before anything loads,
+  and a hit loads with `initialize = false`, so a headless host never links a plugin's JavaFX half.
+- **"Default" means nothing built and nothing reported** (`isDefault`). A hand-built catalog whose classes
+  were all refused keeps its problems rather than being silently replaced by a discovery.
+- It was first written into the contract as `PaletteCatalog.scan` and withdrawn the same day: the contract
+  is interfaces and records, and discovery is a host's job done once, not code every plugin runs on itself.
+
 ### 2026-09-06 — isolation is per provider, and failures are answerable
 
 Two changes, and the first is a defect that could only be seen once a second plugin existed. The

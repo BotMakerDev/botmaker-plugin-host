@@ -7,7 +7,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-No source changes since v0.1.6; re-released for updated upstream pins.
+### Added
+
+- **`Palettes`**: a plugin's palette as a host reads it. `Palettes.of(plugin)` is the plugin's own
+  `catalog()` when it builds one, and otherwise every `@Palette` class in the jar the plugin was loaded from,
+  found without loading or linking anything else. A plugin no longer lists its palette classes.
 
 ### Fixed
 
