@@ -232,6 +232,14 @@ public final class PluginLoader implements Closeable {
     }
 
     /**
+     * The loader the plugins were read from — what a host resolves a bot's call on, so the
+     * {@code Executable} it hands a plugin's editor names that plugin's own classes. Closed with this.
+     */
+    public ClassLoader classLoader() {
+        return loader;
+    }
+
+    /**
      * Releases the jars. Required rather than housekeeping: an open {@link URLClassLoader} holds every jar it
      * read, and on Windows a held jar cannot be replaced — so a project left unclosed makes the next
      * <em>Manage Libraries</em> resolve fail on a file lock.

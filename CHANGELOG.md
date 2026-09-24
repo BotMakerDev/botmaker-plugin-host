@@ -11,6 +11,8 @@ No source changes since v0.1.7; re-released for updated upstream pins.
 
 ### Changed
 
+- **`PluginLoader.classLoader()`** — the loader the plugins came from, which a host resolves a bot's call
+  on so the `Executable` a slot editor is handed (contract 0.3.0) names that plugin's own classes.
 - **`Recordings.Slot.Fresh` carries the parameter's `Class`, not its name.** A host that seeds a fresh value
   looks the type up by the class it was handed rather than by a string it would have to resolve again.
 
