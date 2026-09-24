@@ -9,6 +9,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 No source changes since v0.1.7; re-released for updated upstream pins.
 
+### Changed
+
+- **`Recordings.Slot.Fresh` carries the parameter's `Class`, not its name.** A host that seeds a fresh value
+  looks the type up by the class it was handed rather than by a string it would have to resolve again.
+
 ### Added
 
 - **`Palettes`**: a plugin's palette as a host reads it. `Palettes.of(plugin)` is the plugin's own

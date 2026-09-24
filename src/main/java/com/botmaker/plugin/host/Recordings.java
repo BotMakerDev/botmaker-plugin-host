@@ -54,7 +54,7 @@ public final class Recordings {
         record Keys(Class<?> enumType, boolean many) implements Slot {}
 
         /** A type a plugin gives a fresh value to: that value's Java. */
-        record Fresh(String typeName) implements Slot {}
+        record Fresh(Class<?> type) implements Slot {}
     }
 
     /** Every writer the plugins declare, highest {@link Writer#rank()} first within each gesture. */
@@ -142,7 +142,7 @@ public final class Recordings {
         if (type.isArray() && type.getComponentType().isEnum()) {
             return Optional.of(new Slot.Keys(type.getComponentType(), true));
         }
-        if (hasFresh(name, plugins)) return Optional.of(new Slot.Fresh(name));
+        if (hasFresh(name, plugins)) return Optional.of(new Slot.Fresh(type));
         return Optional.empty();
     }
 
