@@ -8,6 +8,7 @@ import com.botmaker.plugin.api.record.Records;
 import com.botmaker.plugin.api.value.ComponentType;
 import com.botmaker.plugin.api.value.PluginType;
 
+import java.lang.reflect.Executable;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
@@ -46,6 +47,12 @@ public final class Recordings {
 
         /** A type whose components are all numbers: that many of the gesture's next values, built. */
         record Parts(ComponentType<?> type, List<Class<?>> components) implements Slot {}
+
+        /**
+         * A type written as a varargs call over one enum — {@code Combo.of(Key...)}: every remaining key name,
+         * one constant each, built. A host's {@code switch} on {@code Slot} must add this case.
+         */
+        record KeyParts(ComponentType<?> type, Class<?> enumType) implements Slot {}
 
         /** {@code String}: the typed text. */
         record Text() implements Slot {}
@@ -137,6 +144,10 @@ public final class Recordings {
         if (type == int.class || type == long.class || type == double.class) return Optional.of(new Slot.Number(type));
         Optional<ComponentType<?>> parts = numericComponents(name, plugins);
         if (parts.isPresent()) return Optional.of(new Slot.Parts(parts.get(), parts.get().componentTypes()));
+        Optional<ComponentType<?>> keyed = enumVarargs(name, plugins);
+        if (keyed.isPresent()) {
+            return Optional.of(new Slot.KeyParts(keyed.get(), keyed.get().componentTypes().getFirst()));
+        }
         if (type == String.class) return Optional.of(new Slot.Text());
         if (type.isEnum()) return Optional.of(new Slot.Keys(type, false));
         if (type.isArray() && type.getComponentType().isEnum()) {
@@ -146,13 +157,42 @@ public final class Recordings {
         return Optional.empty();
     }
 
+    /** Every component a plugin declares: its component types, and each of its types that is one. */
+    private static List<ComponentType<?>> declared(StudioPlugin plugin) {
+        List<ComponentType<?>> candidates = new ArrayList<>(safe(plugin::componentTypes));
+        for (PluginType<?> type : safe(plugin::types)) {
+            if (type instanceof ComponentType<?> component) candidates.add(component);
+        }
+        return candidates;
+    }
+
+    /** A component declared for {@code name} whose static varargs factory takes one enum array, its one part. */
+    private static Optional<ComponentType<?>> enumVarargs(String name, List<StudioPlugin> plugins) {
+        for (StudioPlugin plugin : plugins) {
+            for (ComponentType<?> component : declared(plugin)) {
+                if (component.type() == null || !component.type().getName().equals(name)) continue;
+                if (receiver(component)) continue;
+                Executable factory;
+                List<Class<?>> parts;
+                try {
+                    factory = component.factory();
+                    parts = component.componentTypes();
+                } catch (RuntimeException | LinkageError e) {
+                    continue;
+                }
+                Class<?>[] parameters = factory.getParameterTypes();
+                if (factory.isVarArgs() && parameters.length == 1 && parts.size() == 1
+                        && parts.getFirst().isEnum() && parameters[0].getComponentType() == parts.getFirst()) {
+                    return Optional.of(component);
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
     private static Optional<ComponentType<?>> numericComponents(String name, List<StudioPlugin> plugins) {
         for (StudioPlugin plugin : plugins) {
-            List<ComponentType<?>> candidates = new ArrayList<>(safe(plugin::componentTypes));
-            for (PluginType<?> type : safe(plugin::types)) {
-                if (type instanceof ComponentType<?> component) candidates.add(component);
-            }
-            for (ComponentType<?> component : candidates) {
+            for (ComponentType<?> component : declared(plugin)) {
                 if (component.type() == null || !component.type().getName().equals(name)) continue;
                 // A chain on part 0 is read, never written, so it is no way to write a recorded value down.
                 if (receiver(component)) continue;

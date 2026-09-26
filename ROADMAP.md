@@ -5,6 +5,14 @@ reasoning.
 
 ## Done
 
+### 2026-09-26 — `Recordings.Slot.KeyParts` (picker phase 6b)
+
+The SDK's `Keyboard.combo(Combo)` takes a value written `Combo.of(Key.CTRL, Key.S)`. No rule filled it:
+`Parts` takes numbers only, `Keys` takes an enum or an enum array, not a type built from one. `KeyParts`
+matches a declared `ComponentType` whose static factory is varargs over one enum array and whose one declared
+part is that enum; it takes every remaining key name. `declared(plugin)` is the candidate list `Parts` and
+`KeyParts` share. `RecordingsTest` adds a `Chord` (fills) and a `Mixed` key-and-count (does not).
+
 ### 2026-09-23 — `Recordings` asks `freshCall()`
 
 The contract's `PluginType.freshSource()` became `freshCall()`, a `Method`. `Recordings.hasFresh` — whether a

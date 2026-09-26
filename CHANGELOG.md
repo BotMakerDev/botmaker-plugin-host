@@ -5,6 +5,14 @@ All notable changes to `botmaker-plugin-host`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
+## [Unreleased]
+
+### Added
+
+- **`Recordings.Slot.KeyParts`**: a `@Records` parameter whose type is written as a varargs call over one enum
+  (`Combo.of(Key...)`) is filled from the gesture's key names, one constant each, and built. Checked after
+  `Parts`, so every existing fill resolves as before. A host's `switch` on `Slot` must add the case.
+
 ## [0.1.8] — 2026-09-26
 
 No source changes since v0.1.7; re-released for updated upstream pins.
