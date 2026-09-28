@@ -5,6 +5,18 @@ All notable changes to `botmaker-plugin-host`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
+## [Unreleased]
+
+### Added
+
+- **`ContractLinks`: a plugin built for a newer contract is refused at load.** Each classpath entry declaring a
+  plugin has its constant pools read; every reference reaching `com.botmaker.plugin.api` (directly, or through
+  the plugin's own supertypes) is resolved against the host's contract class files — never reflected, so a
+  headless host without JavaFX reads them too — and a public or protected member must be there.
+  `PluginLoader.openReporting` skips a provider from an entry with a missing link and reports it as a failure,
+  *built for a newer Studio: needs …*, instead of a `NoSuchMethodError` at first use. The entry stays on the
+  classpath for plugins that depend on it.
+
 ## [0.1.9] — 2026-09-27
 
 ### Added

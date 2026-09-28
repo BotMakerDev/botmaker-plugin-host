@@ -5,11 +5,16 @@ import com.botmaker.plugin.api.StudioPlugin;
 import java.io.Closeable;
 import java.io.File;
 import java.net.MalformedURLException;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.file.Path;
+import java.security.CodeSource;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 
@@ -179,6 +184,14 @@ public final class PluginLoader implements Closeable {
      *
      * <p>{@code LinkageError} rather than {@code Error}: a broken plugin must not make an
      * {@link OutOfMemoryError} look like a missing services file.
+     *
+     * <h2>A plugin built for a newer contract is refused before it is constructed (2026-09-28)</h2>
+     *
+     * <p>Each entry that declares a plugin is read by {@link ContractLinks#missing} against the host's own
+     * contract, and a provider from an entry that links something the host lacks is a failure,
+     * <i>built for a newer Studio: needs …</i>, rather than a {@link NoSuchMethodError} the first time the
+     * missing member is reached. The entry stays on the classpath, because another plugin may depend on its
+     * classes; only its own providers are skipped.
      */
     public static Loaded openReporting(List<String> classpath) {
         if (classpath == null || classpath.isEmpty()) return new Loaded(null, List.of());
@@ -188,6 +201,7 @@ public final class PluginLoader implements Closeable {
         URLClassLoader loader = new Inverted(urls, PluginLoader.class.getClassLoader());
         List<StudioPlugin> found = new ArrayList<>();
         List<PluginFailure> failures = new ArrayList<>();
+        Map<Path, List<ContractLinks.Link>> newer = newerThanThisHost(classpath);
 
         Iterator<ServiceLoader.Provider<StudioPlugin>> providers =
                 ServiceLoader.load(StudioPlugin.class, loader).stream().iterator();
@@ -207,6 +221,11 @@ public final class PluginLoader implements Closeable {
                 // PluginFailure.describe reads it wherever the running JDK put it: raw up to JDK 25, inside
                 // a ServiceConfigurationError from JDK 27.
                 failures.add(new PluginFailure(null, e));
+                continue;
+            }
+            List<ContractLinks.Link> missing = newer.get(entryOf(provider));
+            if (missing != null) {
+                failures.add(new PluginFailure(provider.type().getName(), new ContractLinks.NewerContract(missing)));
                 continue;
             }
             try {
@@ -262,6 +281,38 @@ public final class PluginLoader implements Closeable {
             if (name.startsWith(prefix)) return true;
         }
         return false;
+    }
+
+    /**
+     * Each classpath entry that declares a plugin and links something the host's contract lacks, with what it
+     * lacks. Entries that declare no plugin are not read: a library's links are its plugin's business.
+     */
+    private static Map<Path, List<ContractLinks.Link>> newerThanThisHost(List<String> classpath) {
+        Map<Path, List<ContractLinks.Link>> newer = new HashMap<>();
+        ClassLoader contract = StudioPlugin.class.getClassLoader();
+        for (String entry : classpath) {
+            if (entry == null || entry.isBlank()) continue;
+            Path path;
+            try {
+                path = Path.of(entry).toAbsolutePath().normalize();
+            } catch (RuntimeException notAPath) {
+                continue;                                   // urlsOf has already said so
+            }
+            if (!ContractLinks.declaresPlugin(path)) continue;
+            List<ContractLinks.Link> missing = ContractLinks.missing(path, contract);
+            if (!missing.isEmpty()) newer.put(path, missing);
+        }
+        return newer;
+    }
+
+    /** The classpath entry {@code provider}'s class was read from, or null when it cannot be told. */
+    private static Path entryOf(ServiceLoader.Provider<StudioPlugin> provider) {
+        try {
+            CodeSource source = provider.type().getProtectionDomain().getCodeSource();
+            return source == null ? null : Path.of(source.getLocation().toURI()).toAbsolutePath().normalize();
+        } catch (URISyntaxException | RuntimeException e) {
+            return null;
+        }
     }
 
     private static void close(URLClassLoader loader) {

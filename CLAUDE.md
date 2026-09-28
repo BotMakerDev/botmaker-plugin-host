@@ -8,10 +8,17 @@ against, and `../docs/refactor/24-plugin-platform.md` for why any of it exists.
 
 ## What this module is, and what it is not
 
-It is **three classes**: `PluginLoader`; `Palettes` (2026-09-23), the host's reading of a plugin's
+It is **four classes**: `PluginLoader`; `Palettes` (2026-09-23), the host's reading of a plugin's
 palette — its hand-built `catalog()`, or every `@Palette` class found in the plugin's own jar when
-`catalog()` is the empty default; and `Recordings` (2026-09-23), the `@Records` methods on those classes, each
-with how the host fills every parameter. Discovery lives here because every host (Studio, `botmaker plugin
+`catalog()` is the empty default; `Recordings` (2026-09-23), the `@Records` methods on those classes, each
+with how the host fills every parameter; and `ContractLinks` (2026-09-28), which reads a plugin entry's
+constant pools and resolves every reference reaching the contract against the host's own contract class
+files, so `PluginLoader` refuses a plugin built for a newer Studio at load, naming what it needs, instead of it
+failing with `NoSuchMethodError` at first use (`../docs/refactor/25-compatibility.md` §1). It follows
+references through the plugin's own supertypes, because javac writes an inherited call against the calling
+class; it reads the contract as bytes and never reflects on it, because a contract signature names JavaFX and a
+headless host has none; and it judges nothing it cannot prove missing (a supertype from the toolkit or a
+library is unreadable here). Discovery lives here because every host (Studio, `botmaker plugin
 validate`, the registry's CI) must read the same answer, and the contract holds no implementation. The
 three plugin-facing modules are three different relationships and the fastest way to keep them straight is
 by who depends on which:
@@ -65,7 +72,7 @@ one thing that can make that false. So this module refuses to supply one, and a 
 ## Building
 
 ```bash
-mvn test        # PluginLoaderTest, PalettesTest, RecordingsTest (19)
+mvn test        # PluginLoaderTest, PalettesTest, RecordingsTest, ContractLinksTest (24)
 mvn install     # com.github.LiQiyeDev:botmaker-plugin-host:0.0.0-SNAPSHOT
 ```
 
