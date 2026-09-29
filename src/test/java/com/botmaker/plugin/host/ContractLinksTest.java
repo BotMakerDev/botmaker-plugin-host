@@ -108,8 +108,67 @@ class ContractLinksTest {
         PluginLoader.Loaded loaded = PluginLoader.openReporting(List.of(classes.toString()));
 
         assertNull(loaded.loader());
-        assertEquals(List.of("p.Newer — built for a newer Studio: needs StudioPlugin.newer(…)"),
+        // A class directory carries no pom, so which side is behind is not known: the line says what is missing.
+        assertEquals(List.of("p.Newer — built for a different Studio: it uses StudioPlugin.newer(…),"
+                        + " which this Studio has not got"),
                 loaded.failures().stream().map(PluginLoader.PluginFailure::describe).toList());
+    }
+
+    // ---- which side is behind ----
+
+    @Test
+    void the_direction_is_the_plugins_pin_against_the_hosts() {
+        assertEquals(ContractLinks.Direction.OLDER, ContractLinks.direction("v0.2.1", "v0.3.0"));
+        assertEquals(ContractLinks.Direction.NEWER, ContractLinks.direction("v0.4.0", "v0.3.0"));
+        assertEquals(ContractLinks.Direction.NEWER, ContractLinks.direction("v0.10.0", "v0.9.3"));
+        assertEquals(ContractLinks.Direction.DIFFERENT, ContractLinks.direction(null, "v0.3.0"));
+        assertEquals(ContractLinks.Direction.DIFFERENT, ContractLinks.direction("v0.3.0", "v0.3.0"));
+        // A development host is main, at or past every tag.
+        assertEquals(ContractLinks.Direction.OLDER, ContractLinks.direction("v0.2.1", null));
+    }
+
+    @Test
+    void a_jars_flattened_pom_names_its_contract(@TempDir Path dir) throws IOException {
+        Path tagged = jar(dir.resolve("tagged.jar"), Map.of("META-INF/maven/g/a/pom.xml", pom("v0.2.1")));
+        Path snapshot = jar(dir.resolve("snapshot.jar"), Map.of("META-INF/maven/g/a/pom.xml", pom("0.0.0-SNAPSHOT")));
+        Path none = jar(dir.resolve("none.jar"), Map.of("x.txt", "x"));
+
+        assertEquals("v0.2.1", ContractLinks.declaredContract(tagged));
+        assertNull(ContractLinks.declaredContract(snapshot));
+        assertNull(ContractLinks.declaredContract(none));
+    }
+
+    /**
+     * The user's case of 2026-09-29: an SDK whose plugin extends a contract type Studio has since deleted. The
+     * provider cannot even be resolved, so before the fix the line was {@code a plugin — com/…/Gone is not on
+     * the classpath}, naming neither the plugin nor the way out.
+     */
+    @Test
+    void a_plugin_built_on_a_deleted_contract_type_is_named_and_called_older(@TempDir Path dir) throws IOException {
+        Path stub = compile(dir.resolve("stub"), contractPath(), Map.of(
+                "com/botmaker/plugin/api/Gone.java",
+                "package com.botmaker.plugin.api; public abstract class Gone implements StudioPlugin { }"));
+        Path classes = compile(dir.resolve("plugin"), stub + java.io.File.pathSeparator + contractPath(), Map.of(
+                "p/Old.java",
+                "package p; public final class Old extends com.botmaker.plugin.api.Gone {"
+                        + " public String id() { return \"test.old\"; } }"));
+        Map<String, String> entries = new java.util.HashMap<>();
+        entries.put("p/Old.class", Files.readString(classes.resolve("p/Old.class"), java.nio.charset.StandardCharsets.ISO_8859_1));
+        entries.put(ContractLinks.SERVICES, "p.Old\n");
+        entries.put("META-INF/maven/g/old/pom.xml", pom("v0.0.1"));
+        Path jar = jar(dir.resolve("old.jar"), entries);
+
+        PluginLoader.Loaded loaded = PluginLoader.openReporting(List.of(jar.toString()));
+
+        assertNull(loaded.loader());
+        assertEquals(1, loaded.failures().size(), loaded.failures().toString());
+        PluginLoader.PluginFailure failure = loaded.failures().getFirst();
+        assertEquals("p.Old", failure.provider());
+        ContractLinks.ContractMismatch mismatch = (ContractLinks.ContractMismatch) failure.cause();
+        assertEquals(ContractLinks.Direction.OLDER, mismatch.direction());
+        assertEquals("v0.0.1", mismatch.pluginContract());
+        assertTrue(failure.describe().startsWith("p.Old — built for an older Studio (contract v0.0.1); update the plugin."),
+                failure.describe());
     }
 
     // ---- fixtures ----
@@ -136,6 +195,24 @@ class ContractLinksTest {
         }
         assumeTrue(javac.run(null, null, null, args.toArray(String[]::new)) == 0, "could not compile the fixture");
         return classes;
+    }
+
+    private static String pom(String contract) {
+        return "<project><dependencies><dependency><groupId>com.github.LiQiyeDev</groupId>"
+                + "<artifactId>botmaker-studio-api</artifactId>\n      <version>" + contract
+                + "</version></dependency></dependencies></project>";
+    }
+
+    /** A jar of {@code entries}; each value's chars are written as bytes one-for-one (ISO-8859-1). */
+    private static Path jar(Path file, Map<String, String> entries) throws IOException {
+        try (java.util.zip.ZipOutputStream out = new java.util.zip.ZipOutputStream(Files.newOutputStream(file))) {
+            for (Map.Entry<String, String> entry : entries.entrySet()) {
+                out.putNextEntry(new java.util.zip.ZipEntry(entry.getKey()));
+                out.write(entry.getValue().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
+                out.closeEntry();
+            }
+        }
+        return file;
     }
 
     private static String contractPath() {

@@ -4,19 +4,27 @@ import com.botmaker.plugin.api.StudioPlugin;
 
 import java.io.Closeable;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.CodeSource;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
+import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 /**
  * The plugins on <em>one project's</em> resolved classpath, loaded from that project's own jars.
@@ -109,6 +117,13 @@ public final class PluginLoader implements Closeable {
          */
         public String describe() {
             NoClassDefFoundError missing = missingClass(cause);
+            if (missing != null && missing.getMessage().startsWith(ContractLinks.CONTRACT)) {
+                // A contract class the host has not got: something on the classpath was built for another
+                // Studio, which is what to fix — not a jar to put back.
+                return provider + " — built for a different Studio: it uses "
+                        + missing.getMessage().substring(missing.getMessage().lastIndexOf('/') + 1)
+                        + ", which this Studio has not got";
+            }
             if (missing != null) return provider + " — " + missing.getMessage() + " is not on the classpath";
             String message = cause == null ? "" : cause.getMessage();
             return provider + " — "
@@ -192,6 +207,12 @@ public final class PluginLoader implements Closeable {
      * <i>built for a newer Studio: needs …</i>, rather than a {@link NoSuchMethodError} the first time the
      * missing member is reached. The entry stays on the classpath, because another plugin may depend on its
      * classes; only its own providers are skipped.
+     *
+     * <p><b>And for an older one, named from its services file (2026-09-29).</b> The first real mismatch ran the
+     * other way — an SDK built on a contract that has since deleted what it extends — and there the provider
+     * never resolves: {@code ServiceLoader} throws for a missing contract class, naming neither the provider nor
+     * the contract. So a mismatched entry's providers are reported by the names its services file lists, with
+     * {@link ContractLinks.Direction which side is behind}, and the loader's own error for them is dropped.
      */
     public static Loaded openReporting(List<String> classpath) {
         if (classpath == null || classpath.isEmpty()) return new Loaded(null, List.of());
@@ -201,7 +222,15 @@ public final class PluginLoader implements Closeable {
         URLClassLoader loader = new Inverted(urls, PluginLoader.class.getClassLoader());
         List<StudioPlugin> found = new ArrayList<>();
         List<PluginFailure> failures = new ArrayList<>();
-        Map<Path, List<ContractLinks.Link>> newer = newerThanThisHost(classpath);
+        Map<Path, ContractLinks.ContractMismatch> mismatched = mismatches(classpath);
+        Set<String> unlinked = new HashSet<>();
+        for (Map.Entry<Path, ContractLinks.ContractMismatch> each : mismatched.entrySet()) {
+            // Reported from the services file, by name, before anything is loaded: a provider that extends a
+            // contract type the host no longer has cannot even be resolved, and the loader's own error for it
+            // names neither the provider nor the contract.
+            for (String name : providerNames(each.getKey())) failures.add(new PluginFailure(name, each.getValue()));
+            for (ContractLinks.Link link : each.getValue().missing()) unlinked.add(link.owner());
+        }
 
         Iterator<ServiceLoader.Provider<StudioPlugin>> providers =
                 ServiceLoader.load(StudioPlugin.class, loader).stream().iterator();
@@ -211,6 +240,11 @@ public final class PluginLoader implements Closeable {
                 if (!providers.hasNext()) break;
                 provider = providers.next();
             } catch (ServiceConfigurationError | LinkageError | RuntimeException e) {
+                NoClassDefFoundError missing = PluginFailure.missingClass(e);
+                if (missing != null && !mismatched.isEmpty() && (unlinked.contains(missing.getMessage())
+                        || missing.getMessage().startsWith(ContractLinks.CONTRACT))) {
+                    continue;                                   // the entry's mismatch, reported above
+                }
                 // The services file named a class that could not be resolved. ServiceLoader has already
                 // consumed that line, so the next hasNext() reads the next one — which is what makes this a
                 // `continue` rather than a `break`, and what `a_broken_plugin_does_not_cost_the_others`
@@ -223,11 +257,7 @@ public final class PluginLoader implements Closeable {
                 failures.add(new PluginFailure(null, e));
                 continue;
             }
-            List<ContractLinks.Link> missing = newer.get(entryOf(provider));
-            if (missing != null) {
-                failures.add(new PluginFailure(provider.type().getName(), new ContractLinks.NewerContract(missing)));
-                continue;
-            }
+            if (mismatched.containsKey(entryOf(provider))) continue;                        // reported above
             try {
                 found.add(provider.get());
             } catch (ServiceConfigurationError | LinkageError | RuntimeException e) {
@@ -285,10 +315,11 @@ public final class PluginLoader implements Closeable {
 
     /**
      * Each classpath entry that declares a plugin and links something the host's contract lacks, with what it
-     * lacks. Entries that declare no plugin are not read: a library's links are its plugin's business.
+     * lacks and which side is behind. Entries that declare no plugin are not read: a library's links are its
+     * plugin's business.
      */
-    private static Map<Path, List<ContractLinks.Link>> newerThanThisHost(List<String> classpath) {
-        Map<Path, List<ContractLinks.Link>> newer = new HashMap<>();
+    private static Map<Path, ContractLinks.ContractMismatch> mismatches(List<String> classpath) {
+        Map<Path, ContractLinks.ContractMismatch> mismatched = new LinkedHashMap<>();
         ClassLoader contract = StudioPlugin.class.getClassLoader();
         for (String entry : classpath) {
             if (entry == null || entry.isBlank()) continue;
@@ -300,9 +331,33 @@ public final class PluginLoader implements Closeable {
             }
             if (!ContractLinks.declaresPlugin(path)) continue;
             List<ContractLinks.Link> missing = ContractLinks.missing(path, contract);
-            if (!missing.isEmpty()) newer.put(path, missing);
+            if (!missing.isEmpty()) mismatched.put(path, ContractLinks.mismatch(path, missing));
         }
-        return newer;
+        return mismatched;
+    }
+
+    /** The provider class names {@code entry}'s services file lists, comments and blanks dropped. */
+    static List<String> providerNames(Path entry) {
+        String text;
+        try {
+            if (Files.isDirectory(entry)) {
+                text = Files.readString(entry.resolve(ContractLinks.SERVICES));
+            } else {
+                try (ZipFile zip = new ZipFile(entry.toFile())) {
+                    ZipEntry services = zip.getEntry(ContractLinks.SERVICES);
+                    if (services == null) return List.of();
+                    try (InputStream in = zip.getInputStream(services)) {
+                        text = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+                    }
+                }
+            }
+        } catch (IOException | RuntimeException e) {
+            return List.of();
+        }
+        return text.lines()
+                .map(line -> line.replaceFirst("#.*", "").strip())
+                .filter(line -> !line.isEmpty())
+                .toList();
     }
 
     /** The classpath entry {@code provider}'s class was read from, or null when it cannot be told. */

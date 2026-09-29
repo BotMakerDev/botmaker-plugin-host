@@ -5,6 +5,20 @@ All notable changes to `botmaker-plugin-host`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
+## [Unreleased]
+
+### Fixed
+
+- **A refused plugin now says which side is behind.** Every contract mismatch used to read *built for a newer
+  Studio*, including a plugin built on an older contract that uses members the host has since deleted. The
+  plugin's flattened pom names the contract tag it pinned, and the host compares it with its own. The message
+  now reads *built for an older Studio (contract v0.2.1); update the plugin*, *built for a newer Studio; update
+  Studio*, or *built for a different Studio* when either tag is unknown. `ContractLinks.NewerContract` is now
+  `ContractMismatch`, which carries a `direction()`.
+- **A plugin that extends a deleted contract type is named.** Its provider could not be resolved, so the
+  failure read `a plugin — com/…/X is not on the classpath`. Mismatched entries are now reported from their
+  services file, by provider name, before anything is loaded.
+
 ## [0.2.0] — 2026-09-29
 
 ### Added

@@ -18,7 +18,11 @@ failing with `NoSuchMethodError` at first use (`../docs/refactor/25-compatibilit
 references through the plugin's own supertypes, because javac writes an inherited call against the calling
 class; it reads the contract as bytes and never reflects on it, because a contract signature names JavaFX and a
 headless host has none; and it judges nothing it cannot prove missing (a supertype from the toolkit or a
-library is unreadable here). Discovery lives here because every host (Studio, `botmaker plugin
+library is unreadable here). **Which side is behind** (2026-09-29, `Direction`) is the one thing read from a
+version: the contract tag in the plugin jar's flattened `META-INF/maven/**/pom.xml` against the one in this
+module's own. An untagged host is `main`, so a tagged plugin is the older side. It words the refusal and
+never decides it. A mismatched entry's providers are reported by their services-file names before loading,
+because a provider that extends a deleted contract type cannot be resolved at all. Discovery lives here because every host (Studio, `botmaker plugin
 validate`, the registry's CI) must read the same answer, and the contract holds no implementation. The
 three plugin-facing modules are three different relationships and the fastest way to keep them straight is
 by who depends on which:

@@ -7,9 +7,11 @@ import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -18,6 +20,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -37,6 +41,11 @@ import java.util.zip.ZipFile;
  *
  * <p>It is sharper than a version, too. A plugin built against a newer contract that uses nothing new loads
  * fine, which a version comparison would have refused.
+ *
+ * <p>A version is still read, for one thing only: <em>which way</em> a refused plugin is out of step
+ * ({@link Direction}). The plugin's own version is not in its jar, but its flattened pom names the contract tag
+ * it pinned, and that is what tells <i>update the plugin</i> from <i>update Studio</i>. It never admits or
+ * refuses anything.
  *
  * <h2>A link reaches the contract two ways</h2>
  *
@@ -96,14 +105,36 @@ public final class ContractLinks {
         }
     }
 
-    /** Thrown into a load failure: the plugin names what this host's contract has not got. */
-    public static final class NewerContract extends RuntimeException {
+    /**
+     * Which side of a mismatch is behind, which is what decides what the user updates.
+     *
+     * <p>Until 2026-09-29 every mismatch read <i>built for a newer Studio</i>, and the first one a user met was
+     * the other way round: an SDK built against contract 0.2 in a Studio on 0.3, naming members 0.3 had
+     * deleted. The links alone cannot tell the two apart — a member the host lacks is lacking either way — so
+     * the direction comes from the contract tag the plugin's own published pom names ({@link #declaredContract})
+     * against the one this host was built with.
+     */
+    public enum Direction {
+        /** The plugin pins an older contract than this host's: update the plugin. */
+        OLDER,
+        /** The plugin pins a newer contract than this host's: update Studio. */
+        NEWER,
+        /** Either side's tag is unknown (a local build, a hand-made jar): say what is missing, not whose fault. */
+        DIFFERENT
+    }
+
+    /** Thrown into a load failure: the plugin links what this host's contract has not got. */
+    public static final class ContractMismatch extends RuntimeException {
 
         private final List<Link> missing;
+        private final Direction direction;
+        private final String pluginContract;
 
-        public NewerContract(List<Link> missing) {
-            super(message(missing));
+        ContractMismatch(List<Link> missing, Direction direction, String pluginContract) {
+            super(message(missing, direction, pluginContract));
             this.missing = List.copyOf(missing);
+            this.direction = direction;
+            this.pluginContract = pluginContract;
         }
 
         /** Every reference that did not resolve, in the order the entry's classes were read. */
@@ -111,12 +142,124 @@ public final class ContractLinks {
             return missing;
         }
 
-        private static String message(List<Link> missing) {
-            List<String> names = missing.stream().map(Link::describe).distinct().toList();
-            int shown = Math.min(3, names.size());
-            return "built for a newer Studio: needs " + String.join(", ", names.subList(0, shown))
-                    + (names.size() > shown ? " and " + (names.size() - shown) + " more" : "");
+        public Direction direction() {
+            return direction;
         }
+
+        /** The contract tag the plugin was built against ({@code v0.2.1}), or null when its jar does not say. */
+        public String pluginContract() {
+            return pluginContract;
+        }
+
+        private static String message(List<Link> missing, Direction direction, String pluginContract) {
+            // A whole missing class says more than each of its members, and says it once.
+            Set<String> gone = new HashSet<>();
+            for (Link link : missing) if (link.name() == null) gone.add(link.owner());
+            List<String> names = missing.stream()
+                    .filter(link -> link.name() == null || !gone.contains(link.owner()))
+                    .map(Link::describe).distinct().toList();
+            int shown = Math.min(3, names.size());
+            String listed = String.join(", ", names.subList(0, shown))
+                    + (names.size() > shown ? " and " + (names.size() - shown) + " more" : "");
+            String built = pluginContract == null ? "" : " (contract " + pluginContract + ")";
+            return switch (direction) {
+                case OLDER -> "built for an older Studio" + built + "; update the plugin. It uses " + listed
+                        + ", which this Studio no longer has";
+                case NEWER -> "built for a newer Studio" + built + "; update Studio. It needs " + listed;
+                case DIFFERENT -> "built for a different Studio" + built + ": it uses " + listed
+                        + ", which this Studio has not got";
+            };
+        }
+    }
+
+    /**
+     * The mismatch {@code missing} amounts to for the plugin at {@code entry}, its direction read off the
+     * plugin's pinned contract against this host's.
+     */
+    public static ContractMismatch mismatch(Path entry, List<Link> missing) {
+        return mismatch(entry, missing, hostContract());
+    }
+
+    static ContractMismatch mismatch(Path entry, List<Link> missing, String hostContract) {
+        String plugin = declaredContract(entry);
+        return new ContractMismatch(missing, direction(plugin, hostContract), plugin);
+    }
+
+    /**
+     * Which side is behind. A host without a tag is a build from {@code main} — a development Studio — and
+     * {@code main} is at or past every tag, so a tagged plugin that mismatches it is the older one.
+     */
+    static Direction direction(String pluginContract, String hostContract) {
+        int[] plugin = version(pluginContract);
+        if (plugin == null) return Direction.DIFFERENT;
+        int[] host = version(hostContract);
+        if (host == null) return Direction.OLDER;
+        int order = Arrays.compare(plugin, host);
+        return order < 0 ? Direction.OLDER : order > 0 ? Direction.NEWER : Direction.DIFFERENT;
+    }
+
+    /** {@code v1.2.3} or {@code 1.2.3} as three numbers; null for a snapshot or anything else. */
+    private static int[] version(String tag) {
+        if (tag == null) return null;
+        Matcher m = TAG.matcher(tag.trim());
+        if (!m.matches()) return null;
+        return new int[]{Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2)), Integer.parseInt(m.group(3))};
+    }
+
+    private static final Pattern TAG = Pattern.compile("v?(\\d+)\\.(\\d+)\\.(\\d+)");
+
+    private static final Pattern CONTRACT_PIN = Pattern.compile(
+            "<artifactId>botmaker-studio-api</artifactId>\\s*<version>([^<]+)</version>");
+
+    /**
+     * The contract tag {@code entry}'s published pom pins, or null. Every released module's pom is flattened, so
+     * the jar's {@code META-INF/maven/…/pom.xml} carries the tag the release injected, not the property; a class
+     * directory carries no pom and answers null.
+     */
+    public static String declaredContract(Path entry) {
+        if (entry == null || !Files.isRegularFile(entry)) return null;
+        try (ZipFile zip = new ZipFile(entry.toFile())) {
+            Enumeration<? extends ZipEntry> entries = zip.entries();
+            while (entries.hasMoreElements()) {
+                ZipEntry each = entries.nextElement();
+                String name = each.getName();
+                if (!name.startsWith("META-INF/maven/") || !name.endsWith("/pom.xml")) continue;
+                try (InputStream in = zip.getInputStream(each)) {
+                    String pin = contractPin(new String(in.readAllBytes(), StandardCharsets.UTF_8));
+                    if (pin != null) return pin;
+                }
+            }
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
+        return null;
+    }
+
+    private static volatile String hostContract;
+
+    /**
+     * The contract tag this host was built with: the pin in this module's own published pom, since a host
+     * releases with the contract it pins (host is forced by the contract). Null in a development build.
+     */
+    static String hostContract() {
+        String known = hostContract;
+        if (known != null) return known.isEmpty() ? null : known;
+        String found = null;
+        try (InputStream in = ContractLinks.class.getResourceAsStream(
+                "/META-INF/maven/com.github.LiQiyeDev/botmaker-plugin-host/pom.xml")) {
+            if (in != null) found = contractPin(new String(in.readAllBytes(), StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            found = null;
+        }
+        hostContract = found == null ? "" : found;
+        return found;
+    }
+
+    private static String contractPin(String pom) {
+        Matcher m = CONTRACT_PIN.matcher(pom);
+        if (!m.find()) return null;
+        String pin = m.group(1).trim();
+        return pin.startsWith("${") || pin.endsWith("-SNAPSHOT") ? null : pin;
     }
 
     /** Whether {@code entry}, a jar or a class directory, declares a {@code StudioPlugin}. */
