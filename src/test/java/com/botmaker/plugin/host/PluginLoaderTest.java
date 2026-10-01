@@ -58,7 +58,7 @@ class PluginLoaderTest {
         // The whole reason the split exists: a bot's palette must come from the SDK IT pins, not from the
         // one the host was compiled against.
         assertFalse(PluginLoader.parentFirst("com.botmaker.sdk.plugin.SdkPlugin"));
-        assertFalse(PluginLoader.parentFirst("com.botmaker.sdk.api.interaction.Mouse"));
+        assertFalse(PluginLoader.parentFirst("com.botmaker.sdk.api.input.Mouse"));
     }
 
     @Test
