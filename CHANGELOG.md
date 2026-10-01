@@ -5,6 +5,14 @@ All notable changes to `botmaker-plugin-host`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
+## [Unreleased]
+
+No source changes since v0.2.2; re-released for updated upstream pins.
+
+### Changed
+
+- Built against `botmaker-studio-api` 0.4.0, which deleted `@Palette.order`. No change of its own.
+
 ## [0.2.2] — 2026-10-01
 
 ### Changed
