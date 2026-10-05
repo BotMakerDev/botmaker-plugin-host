@@ -246,7 +246,7 @@ public final class ContractLinks {
         if (known != null) return known.isEmpty() ? null : known;
         String found = null;
         try (InputStream in = ContractLinks.class.getResourceAsStream(
-                "/META-INF/maven/com.github.LiQiyeDev/botmaker-plugin-host/pom.xml")) {
+                "/META-INF/maven/com.github.BotMakerDev/botmaker-plugin-host/pom.xml")) {
             if (in != null) found = contractPin(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         } catch (IOException e) {
             found = null;

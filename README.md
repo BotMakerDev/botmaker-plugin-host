@@ -8,7 +8,7 @@ against. This is the other side: what a **host** uses to get a plugin onto a cla
 
 ```xml
 <dependency>
-    <groupId>com.github.LiQiyeDev</groupId>
+    <groupId>com.github.BotMakerDev</groupId>
     <artifactId>botmaker-plugin-host</artifactId>
     <version>v0.1.0</version>
 </dependency>
@@ -56,8 +56,8 @@ names.
 
 ```bash
 mvn test        # PluginLoaderTest (9) — the split, the nulls, and a real ServiceLoader round trip
-mvn install     # com.github.LiQiyeDev:botmaker-plugin-host:0.0.0-SNAPSHOT
+mvn install     # com.github.BotMakerDev:botmaker-plugin-host:0.0.0-SNAPSHOT
 ```
 
-Published through JitPack, which serves each git tag under `com.github.LiQiyeDev` regardless of this pom's
+Published through JitPack, which serves each git tag under `com.github.BotMakerDev` regardless of this pom's
 `groupId`/`version`. Releases are cut from the umbrella with `../release.sh --plugin-host <version>`.

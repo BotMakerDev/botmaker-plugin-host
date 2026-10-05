@@ -5,11 +5,11 @@
     <modelVersion>4.0.0</modelVersion>
 
     <!--
-      groupId is com.github.LiQiyeDev for the same reason as every other published module: JitPack serves
-      this repo as com.github.LiQiyeDev:botmaker-plugin-host:<tag> whatever this pom says, so matching it
+      groupId is com.github.BotMakerDev for the same reason as every other published module: JitPack serves
+      this repo as com.github.BotMakerDev:botmaker-plugin-host:<tag> whatever this pom says, so matching it
       here makes the reactor GAV identical to the published GAV. The version is cosmetic.
     -->
-    <groupId>com.github.LiQiyeDev</groupId>
+    <groupId>com.github.BotMakerDev</groupId>
     <artifactId>botmaker-plugin-host</artifactId>
     <version>0.0.0-SNAPSHOT</version>
 
@@ -58,7 +58,7 @@
           A consumer therefore declares botmaker-studio-api itself. Studio already does.
         -->
         <dependency>
-            <groupId>com.github.LiQiyeDev</groupId>
+            <groupId>com.github.BotMakerDev</groupId>
             <artifactId>botmaker-studio-api</artifactId>
             <version>${botmaker.studioapi.version}</version>
             <scope>provided</scope>
@@ -101,7 +101,7 @@
               in every SDK up to v1.0.24.
 
               flattenMode=oss with <repositories>keep</repositories>: oss strips the jitpack repository
-              declaration otherwise, and a consumer resolving a com.github.LiQiyeDev artifact needs it.
+              declaration otherwise, and a consumer resolving a com.github.BotMakerDev artifact needs it.
             -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>

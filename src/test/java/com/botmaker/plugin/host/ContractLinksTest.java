@@ -198,7 +198,7 @@ class ContractLinksTest {
     }
 
     private static String pom(String contract) {
-        return "<project><dependencies><dependency><groupId>com.github.LiQiyeDev</groupId>"
+        return "<project><dependencies><dependency><groupId>com.github.BotMakerDev</groupId>"
                 + "<artifactId>botmaker-studio-api</artifactId>\n      <version>" + contract
                 + "</version></dependency></dependencies></project>";
     }

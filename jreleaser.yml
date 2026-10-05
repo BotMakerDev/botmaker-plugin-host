@@ -37,7 +37,7 @@ project:
     homepage: https://github.com/BotMakerDev/botmaker-plugin-host
   languages:
     java:
-      groupId: com.github.LiQiyeDev
+      groupId: com.github.BotMakerDev
       artifactId: botmaker-plugin-host
       version: '21'
 
