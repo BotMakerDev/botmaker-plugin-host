@@ -10,8 +10,8 @@ name: CI
 # no menus at all rather than the bundled ones.
 #
 # botmaker-studio-api is resolved from source, not from JitPack: this repo's pom pins
-# ${botmaker.studioapi.version} = 0.0.0-SNAPSHOT — the version the umbrella reactor and a local
-# `mvn install` produce — so there is no published artifact under that coordinate to download.
+# ${botmaker.studioapi.version} at the contract's main -SNAPSHOT — the version the umbrella reactor and a
+# local `mvn install` produce — so there is no published artifact under that coordinate to download.
 
 on:
   push:
@@ -40,7 +40,7 @@ jobs:
           cache: maven
 
       # RETRIED — Maven Central answers 429 to GitHub-hosted runners; see .github/mvn-retry.sh.
-      - name: Install botmaker-studio-api (0.0.0-SNAPSHOT)
+      - name: Install botmaker-studio-api (its main -SNAPSHOT)
         run: |
           source .github/mvn-retry.sh
           mvn_retry mvn -B -f .deps/botmaker-studio-api/pom.xml install -DskipTests
@@ -78,7 +78,7 @@ jobs:
           echo "JRELEASER_PROJECT_VERSION=$version" >> "$GITHUB_ENV"
 
       # The version comes from the tag via JRELEASER_PROJECT_VERSION above, never from the pom: JitPack
-      # serves every tag as com.github.BotMakerDev:<repo>:<tag> and the pom's <version> is cosmetic.
+      # serves every tag as com.github.BotMakerDev:<repo>:<tag> (the tag's pom agrees since 2026-10-06).
       - name: Publish the release
         uses: jreleaser/release-action@v2
         with:

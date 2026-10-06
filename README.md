@@ -56,7 +56,7 @@ names.
 
 ```bash
 mvn test        # PluginLoaderTest (9) — the split, the nulls, and a real ServiceLoader round trip
-mvn install     # com.github.BotMakerDev:botmaker-plugin-host:0.0.0-SNAPSHOT
+mvn install     # com.github.BotMakerDev:botmaker-plugin-host at the pom's main -SNAPSHOT
 ```
 
 Published through JitPack, which serves each git tag under `com.github.BotMakerDev` regardless of this pom's

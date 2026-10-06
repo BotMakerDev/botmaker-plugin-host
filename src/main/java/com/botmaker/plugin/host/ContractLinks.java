@@ -33,8 +33,8 @@ import java.util.zip.ZipFile;
  *
  * <p>A plugin built against a newer contract than the host's fails the first time it calls the member the
  * host lacks: a {@link NoSuchMethodError} three screens into a session, from a button that looked fine. Nothing
- * earlier can compare versions, because there are none to compare — every module's pom says the cosmetic
- * {@code 0.0.0-SNAPSHOT} and JitPack's tag is not in the jar. What is in the jar is every reference it makes,
+ * earlier can compare versions, because there are none to compare — every tag before 2026-10-06 has the
+ * cosmetic {@code 0.0.0-SNAPSHOT} in its pom, and JitPack's tag is not in the jar. What is in the jar is every reference it makes,
  * in each class's constant pool, with its owner, name and descriptor. So the host reads those and looks each
  * one that reaches the contract up in its own. A plugin whose every link resolves loads; one that names
  * something the host lacks is refused at load, with the member named.

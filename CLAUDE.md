@@ -77,7 +77,7 @@ one thing that can make that false. So this module refuses to supply one, and a 
 
 ```bash
 mvn test        # PluginLoaderTest, PalettesTest, RecordingsTest, ContractLinksTest (27); a fixture that fails to compile fails the test
-mvn install     # com.github.BotMakerDev:botmaker-plugin-host:0.0.0-SNAPSHOT
+mvn install     # com.github.BotMakerDev:botmaker-plugin-host at the pom's main -SNAPSHOT
 ```
 
 **Fail-open catches `LinkageError` too, and that is the arm most likely to fire.** A plugin resolved without
