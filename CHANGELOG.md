@@ -5,6 +5,13 @@ All notable changes to `botmaker-plugin-host`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
+## [Unreleased]
+
+### Fixed
+
+- v0.4.0 never published: Maven Central refused JitPack's build machine (`429 Too Many Requests`) while it
+  fetched a Maven plugin. No source changes since v0.4.0; its notes follow.
+
 ## [0.4.0] — 2026-10-06
 
 ### Changed
