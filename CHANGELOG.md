@@ -5,6 +5,15 @@ All notable changes to `botmaker-plugin-host`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
+## [Unreleased]
+
+### Changed
+
+- The pom carries a real version and names the contract's version, so a tag's pom says what it was built
+  against; `.deps.env` is gone and JitPack runs a plain `mvn install` (umbrella
+  `docs/refactor/43-real-versions.md`).
+- v0.3.2 never published: JitPack's build machine failed to start Maven. This release carries its changes.
+
 ## [0.3.2] — 2026-10-06
 
 ### Changed
