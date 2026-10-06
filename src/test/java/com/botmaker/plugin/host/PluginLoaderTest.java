@@ -136,7 +136,7 @@ class PluginLoaderTest {
         int status = javac.run(null, null, null,
                 "-cp", contract, "-d", classes.toString(),
                 src.resolve("Helper.java").toString(), src.resolve("BrokenPlugin.java").toString());
-        assumeTrue(status == 0, "could not compile the fixture");
+        assertEquals(0, status, "the fixture compiles");
 
         Files.delete(classes.resolve("p/Helper.class"));
         Path services = Files.createDirectories(classes.resolve("META-INF/services"));
@@ -199,7 +199,7 @@ class PluginLoaderTest {
         String contract = StudioPlugin.class.getProtectionDomain().getCodeSource().getLocation().getPath();
         int status = javac.run(null, null, null, "-cp", contract, "-d", classes.toString(),
                 src.resolve("ThrowingPlugin.java").toString());
-        assumeTrue(status == 0, "could not compile the fixture");
+        assertEquals(0, status, "the fixture compiles");
 
         Path services = Files.createDirectories(classes.resolve("META-INF/services"));
         Files.writeString(services.resolve("com.botmaker.plugin.api.StudioPlugin"),
@@ -250,7 +250,7 @@ class PluginLoaderTest {
         String contract = StudioPlugin.class.getProtectionDomain().getCodeSource().getLocation().getPath();
         int status = javac.run(null, null, null, "-cp", contract, "-d", classes.toString(),
                 src.resolve("Helper.java").toString(), src.resolve("BrokenPlugin.java").toString());
-        assumeTrue(status == 0, "could not compile the fixture");
+        assertEquals(0, status, "the fixture compiles");
 
         Files.delete(classes.resolve("p/Helper.class"));
         Files.createDirectories(classes.resolve("META-INF/services"));

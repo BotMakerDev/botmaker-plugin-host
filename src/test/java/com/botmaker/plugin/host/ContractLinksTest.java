@@ -193,7 +193,8 @@ class ContractLinksTest {
             Files.writeString(file, source.getValue());
             args.add(file.toString());
         }
-        assumeTrue(javac.run(null, null, null, args.toArray(String[]::new)) == 0, "could not compile the fixture");
+        // A fixture that stops compiling is this test failing, never a reason to skip it.
+        assertEquals(0, javac.run(null, null, null, args.toArray(String[]::new)), "the fixture compiles");
         return classes;
     }
 

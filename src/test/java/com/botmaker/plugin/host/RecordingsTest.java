@@ -89,7 +89,7 @@ class RecordingsTest {
                 package p;
                 import com.botmaker.plugin.api.record.Gesture;
                 import com.botmaker.plugin.api.record.Records;
-                @com.botmaker.plugin.api.palette.Palette(category = "demo", order = 1)
+                @com.botmaker.plugin.api.palette.Palette(category = "demo")
                 public final class Input {
                     @Records(Gesture.CLICK) public static void click(int x, int y) { }
                     @Records(value = Gesture.CLICK, rank = 10) public static void clickThing(Thing t) { }
@@ -147,7 +147,8 @@ class RecordingsTest {
         try (Stream<Path> files = Files.list(src)) {
             files.map(Path::toString).forEach(args::add);
         }
-        assumeTrue(javac.run(null, null, null, args.toArray(String[]::new)) == 0, "could not compile the fixture");
+        // A fixture that stops compiling is this test failing, never a reason to skip it.
+        assertEquals(0, javac.run(null, null, null, args.toArray(String[]::new)), "the fixture compiles");
 
         Path services = Files.createDirectories(classes.resolve("META-INF/services"));
         Files.writeString(services.resolve(StudioPlugin.class.getName()), "p.ThePlugin\n");

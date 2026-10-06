@@ -76,7 +76,7 @@ one thing that can make that false. So this module refuses to supply one, and a 
 ## Building
 
 ```bash
-mvn test        # PluginLoaderTest, PalettesTest, RecordingsTest, ContractLinksTest (24)
+mvn test        # PluginLoaderTest, PalettesTest, RecordingsTest, ContractLinksTest (27); a fixture that fails to compile fails the test
 mvn install     # com.github.BotMakerDev:botmaker-plugin-host:0.0.0-SNAPSHOT
 ```
 

@@ -71,10 +71,10 @@ class PalettesTest {
         assumeTrue(javac != null, "no javac in this JRE");
 
         Path src = Files.createDirectories(dir.resolve("src/p"));
-        String palette = "@com.botmaker.plugin.api.palette.Palette(category = \"demo\", order = %d)";
-        Files.writeString(src.resolve("Api.java"), "package p; " + palette.formatted(1)
+        String palette = "@com.botmaker.plugin.api.palette.Palette(category = \"demo\")";
+        Files.writeString(src.resolve("Api.java"), "package p; " + palette
                 + " public final class Api { public static String greet(String who) { return who; } }");
-        Files.writeString(src.resolve("Other.java"), "package p; " + palette.formatted(2)
+        Files.writeString(src.resolve("Other.java"), "package p; " + palette
                 + " public final class Other { public static void wave() { } }");
         Files.writeString(src.resolve("Plain.java"), "package p; public final class Plain { }");
         Files.writeString(src.resolve("ThePlugin.java"), """
@@ -92,7 +92,8 @@ class PalettesTest {
         try (Stream<Path> files = Files.list(src)) {
             files.map(Path::toString).forEach(args::add);
         }
-        assumeTrue(javac.run(null, null, null, args.toArray(String[]::new)) == 0, "could not compile the fixture");
+        // A fixture that stops compiling is this test failing, never a reason to skip it.
+        assertEquals(0, javac.run(null, null, null, args.toArray(String[]::new)), "the fixture compiles");
 
         Path services = Files.createDirectories(classes.resolve("META-INF/services"));
         Files.writeString(services.resolve(StudioPlugin.class.getName()), "p.ThePlugin\n");
