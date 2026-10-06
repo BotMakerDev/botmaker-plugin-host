@@ -12,7 +12,7 @@
     -->
     <groupId>com.github.BotMakerDev</groupId>
     <artifactId>botmaker-plugin-host</artifactId>
-    <version>0.3.3-SNAPSHOT</version>
+    <version>0.4.0</version>
 
     <name>BotMaker Plugin Host</name>
     <description>
@@ -39,7 +39,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <junit.version>5.10.2</junit.version>
         <!-- studio-api's main version; a release commit sets the released one (doc 43). -->
-        <botmaker.studioapi.version>0.5.1-SNAPSHOT</botmaker.studioapi.version>
+        <botmaker.studioapi.version>v0.5.0</botmaker.studioapi.version>
     </properties>
 
     <repositories>
