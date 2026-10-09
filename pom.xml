@@ -39,7 +39,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <junit.version>5.10.2</junit.version>
         <!-- studio-api's main version; a release commit sets the released one (doc 43). -->
-        <botmaker.studioapi.version>0.5.1-SNAPSHOT</botmaker.studioapi.version>
+        <botmaker.studioapi.version>0.6.1-SNAPSHOT</botmaker.studioapi.version>
     </properties>
 
     <repositories>
