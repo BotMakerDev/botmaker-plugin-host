@@ -5,6 +5,14 @@ All notable changes to `botmaker-plugin-host`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
+## [Unreleased]
+
+### Build
+
+- **JitPack builds with `.jitpack/build.sh`**, the umbrella's `tools/jitpack/build.sh`: Maven 3.9.9 and every
+  dependency from Google's mirror of Maven Central first, with backoff and Maven's 429 retry, so Central's
+  `429 Too Many Requests` no longer loses a tag. The statx shim comes with it.
+
 ## [0.5.2] — 2026-10-12
 
 No source changes since v0.5.1; re-released for updated upstream pins.
