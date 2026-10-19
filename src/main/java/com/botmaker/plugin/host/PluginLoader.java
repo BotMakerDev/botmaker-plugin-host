@@ -125,10 +125,14 @@ public final class PluginLoader implements Closeable {
                         + ", which this Studio has not got";
             }
             if (missing != null) return provider + " — " + missing.getMessage() + " is not on the classpath";
-            String message = cause == null ? "" : cause.getMessage();
+            // "Provider p.X could not be instantiated" says nothing the provider's name does not: what its
+            // constructor threw is what to fix (2026-10-19).
+            Throwable said = cause instanceof ServiceConfigurationError wrapped && wrapped.getCause() != null
+                    ? wrapped.getCause() : cause;
+            String message = said == null ? "" : said.getMessage();
             return provider + " — "
                     + (message == null || message.isBlank()
-                    ? (cause == null ? "did not load" : cause.getClass().getSimpleName())
+                    ? (said == null ? "did not load" : said.getClass().getSimpleName())
                     : message);
         }
 

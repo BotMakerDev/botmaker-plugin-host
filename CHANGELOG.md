@@ -5,6 +5,13 @@ All notable changes to `botmaker-plugin-host`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
+## [Unreleased]
+
+### Changed
+
+- **A plugin whose constructor throws is described by what it threw**, not by `ServiceLoader`'s "Provider … could
+  not be instantiated" (`PluginFailure.describe`).
+
 ## [0.6.0] — 2026-10-18
 
 No source changes since v0.5.3; re-released for updated upstream pins.
