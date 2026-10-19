@@ -7,6 +7,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- **`FilledTypes`**: every `@Fills` method in a plugin's own jar, found like the `@Palette` classes (the jar scan
+  is now shared, `JarClasses`) and kept per plugin class; a method of the wrong shape, or a second for one class,
+  is a problem and declares nothing. `Recordings` counts such a type as having a fresh value.
+
 ### Changed
 
 - **A plugin whose constructor throws is described by what it threw**, not by `ServiceLoader`'s "Provider … could

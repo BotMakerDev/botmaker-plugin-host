@@ -217,6 +217,9 @@ public final class Recordings {
 
     private static boolean hasFresh(String name, List<StudioPlugin> plugins) {
         for (StudioPlugin plugin : plugins) {
+            for (FilledTypes.Filled filled : FilledTypes.of(plugin).filled()) {
+                if (filled.type().getName().equals(name)) return true;
+            }
             for (PluginType<?> type : safe(plugin::types)) {
                 if (type.type() == null || !type.type().getName().equals(name)) continue;
                 try {
