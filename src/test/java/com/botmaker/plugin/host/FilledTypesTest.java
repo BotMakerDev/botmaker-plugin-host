@@ -43,7 +43,7 @@ class FilledTypesTest {
         assumeTrue(javac != null, "no javac in this JRE");
 
         Path src = Files.createDirectories(dir.resolve("src/p"));
-        String fills = "@com.botmaker.plugin.api.value.Fills";
+        String fills = "@com.botmaker.plugin.api.palette.Fills";
         Files.writeString(src.resolve("Match.java"), "package p; public record Match(int x) { }");
         Files.writeString(src.resolve("Score.java"), "package p; public record Score(int value) { }");
         Files.writeString(src.resolve("Api.java"), "package p; public final class Api {"

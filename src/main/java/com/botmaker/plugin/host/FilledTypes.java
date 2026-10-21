@@ -1,7 +1,7 @@
 package com.botmaker.plugin.host;
 
 import com.botmaker.plugin.api.StudioPlugin;
-import com.botmaker.plugin.api.value.Fills;
+import com.botmaker.plugin.api.palette.Fills;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
