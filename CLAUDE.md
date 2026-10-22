@@ -8,10 +8,9 @@ against, and `../docs/refactor/24-plugin-platform.md` for why any of it exists.
 
 ## What this module is, and what it is not
 
-It is **four classes**: `PluginLoader`; `Palettes` (2026-09-23), the host's reading of a plugin's
+It is **three classes**: `PluginLoader`; `Palettes` (2026-09-23), the host's reading of a plugin's
 palette — its hand-built `catalog()`, or every `@Palette` class found in the plugin's own jar when
-`catalog()` is the empty default; `Recordings` (2026-09-23), the `@Records` methods on those classes, each
-with how the host fills every parameter; and `ContractLinks` (2026-09-28), which reads a plugin entry's
+`catalog()` is the empty default; and `ContractLinks` (2026-09-28), which reads a plugin entry's
 constant pools and resolves every reference reaching the contract against the host's own contract class
 files, so `PluginLoader` refuses a plugin built for a newer Studio at load, naming what it needs, instead of it
 failing with `NoSuchMethodError` at first use (`../docs/refactor/25-compatibility.md` §1). It follows
@@ -76,7 +75,7 @@ one thing that can make that false. So this module refuses to supply one, and a 
 ## Building
 
 ```bash
-mvn test        # PluginLoaderTest, PalettesTest, RecordingsTest, ContractLinksTest (27); a fixture that fails to compile fails the test
+mvn test        # PluginLoaderTest, PalettesTest, ContractLinksTest; a fixture that fails to compile fails the test
 mvn install     # com.github.BotMakerDev:botmaker-plugin-host at the pom's main -SNAPSHOT
 ```
 

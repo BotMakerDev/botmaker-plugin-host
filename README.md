@@ -25,7 +25,6 @@ thing that can make that false.
 | `PluginLoader` | one `URLClassLoader` over the project's resolved classpath and one `ServiceLoader` pass in it |
 | `ContractLinks` | what a plugin's compiled classes link in the contract that the host's contract lacks, and which side is behind |
 | `Palettes` | a plugin's palette: every `@Palette` class in the jar it was loaded from, unless it builds a catalog by hand |
-| `Recordings` | the plugins' recorded-input methods, each parameter classified by how the host fills it |
 
 ## Using it
 
