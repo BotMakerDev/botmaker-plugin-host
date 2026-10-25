@@ -5,7 +5,7 @@ All notable changes to `botmaker-plugin-host`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
-## [Unreleased]
+## [0.8.0] — 2026-10-25
 
 No source changes since v0.7.0; re-released for updated upstream pins.
 
