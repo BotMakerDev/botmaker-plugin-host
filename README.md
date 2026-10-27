@@ -22,7 +22,8 @@ thing that can make that false.
 
 | | |
 |---|---|
-| `PluginLoader` | one `URLClassLoader` over the project's resolved classpath and one `ServiceLoader` pass in it |
+| `PluginPoms` | which plugin an entry declares: the one `META-INF/maven/<g>/<a>/pom.xml` setting `botmaker.plugin`, its coordinate and `<name>`, read as bytes |
+| `PluginLoader` | one `URLClassLoader` over the project's resolved classpath, constructing the class each declaring pom names |
 | `ContractLinks` | what a plugin's compiled classes link in the contract that the host's contract lacks, and which side is behind |
 | `Palettes` | a plugin's palette: every `@Palette` class in the jar it was loaded from, unless it builds a catalog by hand |
 
@@ -31,18 +32,23 @@ thing that can make that false.
 ```java
 try (PluginLoader loaded = PluginLoader.open(project.resolvedClasspath())) {
     if (loaded == null) return fallbackPlugins();   // nothing to load, or nothing loadable
-    for (StudioPlugin plugin : loaded.plugins()) {
+    for (LoadedPlugin plugin : loaded.plugins()) {   // coordinate, name, jar, instance
         …
     }
 }
 ```
 
+A plugin is declared by its jar's pom: exactly one `META-INF/maven/<g>/<a>/pom.xml` in the jar sets
+`<botmaker.plugin>the.plugin.Class</botmaker.plugin>`, and that pom's `groupId:artifactId` is the plugin's
+identity, its `<name>` the name. The class is the jar's own `public final` direct `DeclaredPlugin`. A jar with two
+declaring poms, a second jar with one coordinate and a class of the wrong shape are refused, each a
+`PluginFailure` from `openReporting`; a jar with none is a library.
+
 Two things to know before you write the second line:
 
-- **`open` returns `null`, not an empty loader.** An unresolvable pin, a jar with no services file and a
-  plugin whose constructor throws are all the same answer, because the caller's fallback is the same in all
-  three: whatever plugin set it already had. Studio bundles no plugin, so its fallback is an empty set and a
-  project that resolves nothing opens with no plugin menus.
+- **`open` returns `null`, not an empty loader.** An unresolvable pin, a classpath that declares no plugin and
+  one whose every plugin is refused are all the same answer: a host holds no classloader for a project with no
+  plugin. Studio bundles no plugin, so a project that loads nothing opens with no plugin menus.
 - **`close()` is required.** An open `URLClassLoader` holds every jar it read, and on Windows a held jar
   cannot be replaced — a project left unclosed makes the next dependency resolve fail on a file lock.
 
@@ -58,7 +64,7 @@ throws much later as a `ClassCastException` between two classes with identical n
 ## Building
 
 ```bash
-mvn test        # the delegation split, the nulls, the link check and a real ServiceLoader round trip
+mvn test        # the delegation split, the nulls, the link check, the declaring poms and their refusals
 mvn install     # com.github.BotMakerDev:botmaker-plugin-host at the pom's main -SNAPSHOT
 ```
 
