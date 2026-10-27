@@ -28,7 +28,7 @@ class FilledTypesTest {
     void each_fills_method_declares_its_return_type(@TempDir Path dir) throws IOException {
         try (PluginLoader loader = PluginLoader.open(List.of(compile(dir).toString()))) {
             assertNotNull(loader);
-            FilledTypes.Found found = FilledTypes.of(loader.plugins().getFirst());
+            FilledTypes.Found found = FilledTypes.of(loader.plugins().getFirst().plugin());
             assertEquals(List.of("p.Match: Picture match <- last", "p.Score: Score <- zero"), found.filled().stream()
                     .map(f -> f.type().getName() + ": " + f.label() + " <- " + f.call().getName()).toList());
             assertEquals(3, found.problems().size(), found.problems().toString());
@@ -55,8 +55,9 @@ class FilledTypesTest {
                 + "}");
         Files.writeString(src.resolve("ThePlugin.java"), """
                 package p;
-                public final class ThePlugin implements com.botmaker.plugin.api.StudioPlugin {
-                    @Override public String id() { return "test.fills"; }
+                import com.botmaker.plugin.api.*;
+                public final class ThePlugin extends DeclaredPlugin {
+                    public ThePlugin() { super(StudioPlugin.declare()); }
                 }
                 """);
 
@@ -69,8 +70,6 @@ class FilledTypesTest {
         // A fixture that stops compiling is this test failing, never a reason to skip it.
         assertEquals(0, javac.run(null, null, null, args.toArray(String[]::new)), "the fixture compiles");
 
-        Path services = Files.createDirectories(classes.resolve("META-INF/services"));
-        Files.writeString(services.resolve(StudioPlugin.class.getName()), "p.ThePlugin\n");
-        return classes;
+        return PluginFixtures.declare(classes, "fills", "p.ThePlugin");
     }
 }

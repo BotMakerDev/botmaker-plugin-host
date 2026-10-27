@@ -83,9 +83,10 @@ class ContractLinksTest {
     @Test
     void a_plugin_built_against_this_contract_links_nothing_missing(@TempDir Path dir) throws IOException {
         Path classes = compile(dir, contractPath(), Map.of("p/Current.java",
-                "package p; import com.botmaker.plugin.api.toolbar.*;"
-                        + " public final class Current implements com.botmaker.plugin.api.StudioPlugin {"
-                        + " public String id() { return \"test.current\"; }"
+                "package p; import com.botmaker.plugin.api.*; import com.botmaker.plugin.api.toolbar.*;"
+                        + " public final class Current extends DeclaredPlugin {"
+                        + " public Current() { super(StudioPlugin.declare()); }"
+                        + " String id() { return \"test.current\"; }"
                         + " ToolbarItem item() { return ToolbarItem.id(\"x\").label(\"x\").tooltip(\"y\")"
                         + " .in(ToolbarGroup.TOOLS, 1).enabledWhen(EnabledWhen.ALWAYS).onPress(() -> c -> { }); }"
                         + " String name() { return ToolbarGroup.TOOLS.name() + id().hashCode(); } }"));
@@ -102,8 +103,7 @@ class ContractLinksTest {
                 Map.of("p/Newer.java",
                         "package p; public final class Newer implements com.botmaker.plugin.api.StudioPlugin {"
                                 + " public String id() { newer(); return \"test.newer\"; } }"));
-        Path services = Files.createDirectories(classes.resolve("META-INF/services"));
-        Files.writeString(services.resolve("com.botmaker.plugin.api.StudioPlugin"), "p.Newer\n");
+        PluginFixtures.declare(classes, "newer", "p.Newer");
 
         PluginLoader.Loaded loaded = PluginLoader.openReporting(List.of(classes.toString()));
 
@@ -147,15 +147,14 @@ class ContractLinksTest {
     void a_plugin_built_on_a_deleted_contract_type_is_named_and_called_older(@TempDir Path dir) throws IOException {
         Path stub = compile(dir.resolve("stub"), contractPath(), Map.of(
                 "com/botmaker/plugin/api/Gone.java",
-                "package com.botmaker.plugin.api; public abstract class Gone implements StudioPlugin { }"));
+                "package com.botmaker.plugin.api; public abstract class Gone extends DeclaredPlugin {"
+                        + " protected Gone() { super(StudioPlugin.declare()); } }"));
         Path classes = compile(dir.resolve("plugin"), stub + java.io.File.pathSeparator + contractPath(), Map.of(
                 "p/Old.java",
-                "package p; public final class Old extends com.botmaker.plugin.api.Gone {"
-                        + " public String id() { return \"test.old\"; } }"));
+                "package p; public final class Old extends com.botmaker.plugin.api.Gone { }"));
         Map<String, String> entries = new java.util.HashMap<>();
-        entries.put("p/Old.class", Files.readString(classes.resolve("p/Old.class"), java.nio.charset.StandardCharsets.ISO_8859_1));
-        entries.put(ContractLinks.SERVICES, "p.Old\n");
-        entries.put("META-INF/maven/g/old/pom.xml", pom("v0.0.1"));
+        entries.put("p/Old.class", PluginFixtures.bytes(classes.resolve("p/Old.class")));
+        entries.put("META-INF/maven/g/old/pom.xml", PluginFixtures.pom("g", "old", "p.Old", "v0.0.1"));
         Path jar = jar(dir.resolve("old.jar"), entries);
 
         PluginLoader.Loaded loaded = PluginLoader.openReporting(List.of(jar.toString()));

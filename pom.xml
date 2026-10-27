@@ -65,6 +65,17 @@
             <scope>provided</scope>
         </dependency>
 
+        <!--
+          The pom reader (2026-10-27): a plugin is named by its jar's pom (PluginPoms), and this is the parser
+          Studio and the CLI already read poms with. The one exception to "contract and JDK only": no natives,
+          and none of its types crosses the plugin boundary — PluginPoms answers its own records.
+        -->
+        <dependency>
+            <groupId>org.apache.maven</groupId>
+            <artifactId>maven-model</artifactId>
+            <version>3.10.0</version>
+        </dependency>
+
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

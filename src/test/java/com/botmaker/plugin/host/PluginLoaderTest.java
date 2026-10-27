@@ -1,41 +1,36 @@
 package com.botmaker.plugin.host;
 
-import com.botmaker.plugin.api.StudioPlugin;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 
-import javax.tools.JavaCompiler;
-import javax.tools.ToolProvider;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
+import static com.botmaker.plugin.host.PluginFixtures.bytes;
+import static com.botmaker.plugin.host.PluginFixtures.compile;
+import static com.botmaker.plugin.host.PluginFixtures.contractPath;
+import static com.botmaker.plugin.host.PluginFixtures.declare;
+import static com.botmaker.plugin.host.PluginFixtures.jar;
+import static com.botmaker.plugin.host.PluginFixtures.plugin;
+import static com.botmaker.plugin.host.PluginFixtures.pom;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * What a host is entitled to assume of the loader.
  *
- * <p>The two halves worth holding are the ones with no visible symptom when they are wrong: the
- * parent-first rule, whose failure surfaces much later as a {@link ClassCastException} between two
- * identically named classes, and <em>nothing loadable answers null</em>, whose failure is a project opening
- * with no menus at all rather than the bundled ones.
+ * <p>The halves worth holding are the ones with no visible symptom when they are wrong: the parent-first rule,
+ * whose failure surfaces much later as a {@link ClassCastException} between two identically named classes; and
+ * one jar being one plugin, whose failure is two plugins answering for the same classes.
  */
 class PluginLoaderTest {
-
-    /** Named by the services file written in {@link #a_services_file_on_the_classpath_is_loaded}. */
-    public static final class Stub implements StudioPlugin {
-        @Override
-        public String id() {
-            return "test.stub";
-        }
-    }
 
     // ---- the delegation split ----
 
@@ -70,7 +65,7 @@ class PluginLoaderTest {
         assertFalse(PluginLoader.parentFirst("javafxsupport.Thing"));
     }
 
-    // ---- nothing loadable answers null ----
+    // ---- nothing to load answers null ----
 
     @Test
     void no_classpath_is_null() {
@@ -84,190 +79,229 @@ class PluginLoaderTest {
     }
 
     @Test
-    void a_classpath_with_no_services_file_is_null(@TempDir Path dir) {
-        // The ordinary case for a project that pins a library which is not a plugin.
-        assertNull(PluginLoader.open(List.of(dir.toString())));
+    void a_library_is_not_a_plugin(@TempDir Path dir) throws IOException {
+        // The ordinary case for a project that pins a library: its pom names no class.
+        Path classes = compile(dir, contractPath(), Map.ofEntries(plugin("Good")));
+        Path pom = classes.resolve("META-INF/maven/test/lib/pom.xml");
+        Files.createDirectories(pom.getParent());
+        Files.writeString(pom, pom("test", "lib", null, null));
+
+        PluginLoader.Loaded loaded = PluginLoader.openReporting(List.of(classes.toString()));
+
+        assertNull(loaded.loader());
+        assertEquals(List.of(), loaded.failures());
     }
 
     // ---- the round trip ----
 
     @Test
-    void a_services_file_on_the_classpath_is_loaded(@TempDir Path dir) throws IOException {
-        // The class itself is on the parent, and the child directory has no copy — which is exactly the
-        // fallback arm of the child-first branch, so this exercises the split rather than working around
-        // it. What is being asserted is the ServiceLoader pass: a declaration on the project's own
-        // classpath produces an instance typed as the contract.
-        Path services = dir.resolve("META-INF/services");
-        Files.createDirectories(services);
-        Files.writeString(services.resolve("com.botmaker.plugin.api.StudioPlugin"),
-                Stub.class.getName() + "\n");
+    void the_class_the_pom_names_is_loaded_with_its_coordinate_name_and_jar(@TempDir Path dir) throws IOException {
+        Path classes = declare(compile(dir, contractPath(), Map.ofEntries(plugin("Good"))), "good", "p.Good");
 
-        try (PluginLoader loaded = PluginLoader.open(List.of(dir.toString()))) {
-            assertNotNull(loaded);
-            assertEquals(1, loaded.plugins().size());
-            assertEquals("test.stub", loaded.plugins().get(0).id());
+        try (PluginLoader loader = PluginLoader.open(List.of(classes.toString()))) {
+            assertNotNull(loader);
+            LoadedPlugin only = loader.plugins().getFirst();
+            assertEquals(1, loader.plugins().size());
+            assertEquals(new PluginCoordinate("test", "good"), only.coordinate());
+            assertEquals("good plugin", only.name());
+            assertEquals(classes.toAbsolutePath().normalize(), only.jar());
+            assertEquals("p.Good", only.plugin().getClass().getName());
         }
     }
 
     @Test
-    void a_plugin_whose_own_dependency_is_missing_answers_null(@TempDir Path dir) throws IOException {
-        // Found on 2026-08-28 by loading the archetype's skeleton with the toolkit left off the classpath.
-        // ServiceLoader's Class.forName throws NoClassDefFoundError — an Error, not a RuntimeException — so
-        // before the LinkageError arm it left `open` and aborted the host's project-open.
-        //
-        // Built rather than described: a plugin is compiled against a helper, the helper's .class is then
-        // deleted, which is exactly the state a jar resolved without its dependency is in.
-        JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
-        assumeTrue(javac != null, "no javac in this JRE");
+    void a_plugin_whose_own_dependency_is_missing_says_which(@TempDir Path dir) throws IOException {
+        // Found on 2026-08-28 by loading the archetype's skeleton with the toolkit left off the classpath:
+        // resolving the class throws NoClassDefFoundError — an Error, not a RuntimeException.
+        PluginLoader.Loaded loaded = PluginLoader.openReporting(List.of(brokenPlugin(dir).toString()));
 
-        Path src = Files.createDirectories(dir.resolve("src/p"));
-        // The helper is a SUPERCLASS, which is what the real case looks like: the archetype's skeleton
-        // extends the toolkit's AbstractStudioPlugin. A missing class named only inside a method body would
-        // not reproduce this — the JVM resolves those lazily, so the plugin would load and fail later.
-        Files.writeString(src.resolve("Helper.java"),
-                "package p; public abstract class Helper { public String name() { return \"broken\"; } }");
-        Files.writeString(src.resolve("BrokenPlugin.java"),
-                "package p; public final class BrokenPlugin extends Helper"
-                        + " implements com.botmaker.plugin.api.StudioPlugin {"
-                        + " @Override public String id() { return name(); } }");
-
-        Path classes = Files.createDirectories(dir.resolve("classes"));
-        String contract = StudioPlugin.class.getProtectionDomain().getCodeSource().getLocation().getPath();
-        int status = javac.run(null, null, null,
-                "-cp", contract, "-d", classes.toString(),
-                src.resolve("Helper.java").toString(), src.resolve("BrokenPlugin.java").toString());
-        assertEquals(0, status, "the fixture compiles");
-
-        Files.delete(classes.resolve("p/Helper.class"));
-        Path services = Files.createDirectories(classes.resolve("META-INF/services"));
-        Files.writeString(services.resolve("com.botmaker.plugin.api.StudioPlugin"), "p.BrokenPlugin\n");
-
-        assertNull(PluginLoader.open(List.of(classes.toString())));
+        assertNull(loaded.loader());
+        assertEquals(List.of("p.BrokenPlugin — p/Helper is not on the classpath"),
+                loaded.failures().stream().map(PluginLoader.PluginFailure::describe).toList());
     }
 
     // ---- one broken plugin costs only itself ----
 
-    /**
-     * <b>The phase-4 defect, and it was invisible while the world had one plugin.</b> The loop used to be one
-     * {@code for} over {@link java.util.ServiceLoader} inside one {@code try}: the first provider that would
-     * not load ended the iteration, so every plugin declared after it was silently absent. With two plugins
-     * on a classpath that is the difference between <i>the SDK is broken</i> and <i>nothing works</i>.
-     *
-     * <p>The broken one is declared <b>first</b> on purpose — that is the ordering the old code lost the
-     * others on.
-     */
+    /** The broken one comes first on purpose — the ordering the services-file loop once lost the others on. */
     @Test
     @Timeout(30)
     void a_broken_plugin_does_not_cost_the_others(@TempDir Path dir) throws IOException {
-        Path classes = compileBrokenPlugin(dir);
-        Files.writeString(classes.resolve("META-INF/services/com.botmaker.plugin.api.StudioPlugin"),
-                "p.BrokenPlugin\n" + Stub.class.getName() + "\n");
+        Path broken = brokenPlugin(dir.resolve("broken"));
+        Path good = declare(compile(dir.resolve("good"), contractPath(), Map.ofEntries(plugin("Good"))),
+                "good", "p.Good");
 
-        PluginLoader.Loaded loaded = PluginLoader.openReporting(List.of(classes.toString()));
+        PluginLoader.Loaded loaded = PluginLoader.openReporting(List.of(broken.toString(), good.toString()));
         try (PluginLoader plugins = loaded.loader()) {
             assertNotNull(plugins, "the working plugin must survive the broken one");
-            assertEquals(List.of("test.stub"), plugins.plugins().stream().map(p -> p.id()).toList());
+            assertEquals(List.of("test:good"), coordinates(plugins));
             assertEquals(1, loaded.failures().size(), "the broken one must be reported, not swallowed");
-            // A missing superclass is a raw NoClassDefFoundError out of Class.forName, which names the
-            // class that was missing and not the provider — ServiceLoader never says which line it was
-            // on. What the user needs to fix is the missing class, so that is what the line names.
-            assertEquals("a plugin — p/Helper is not on the classpath", loaded.failures().get(0).describe());
         }
     }
 
-    /**
-     * The second moment a plugin can fail, and it is a different moment: advancing the iterator runs
-     * {@code Class.forName}, {@code Provider.get()} runs the no-arg constructor. This is the shape that
-     * shipped as SDK v1.1.5 — a constructor that linked an {@code optional} dependency, so every host
-     * without it answered {@code NoClassDefFoundError} while {@code ServiceLoader} was constructing.
-     */
+    /** A constructor that throws: the shape SDK v1.1.5 shipped, a constructor linking an optional dependency. */
     @Test
     @Timeout(30)
-    void a_plugin_whose_constructor_throws_is_reported_and_the_rest_load(@TempDir Path dir)
-            throws IOException {
-        JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
-        assumeTrue(javac != null, "no javac in this JRE");
-
-        Path src = Files.createDirectories(dir.resolve("src/p"));
-        Files.writeString(src.resolve("ThrowingPlugin.java"),
-                "package p; public final class ThrowingPlugin"
-                        + " implements com.botmaker.plugin.api.StudioPlugin {"
-                        + " public ThrowingPlugin() { throw new IllegalStateException(\"no display\"); }"
-                        + " @Override public String id() { return \"p.throwing\"; } }");
-
-        Path classes = Files.createDirectories(dir.resolve("classes"));
-        String contract = StudioPlugin.class.getProtectionDomain().getCodeSource().getLocation().getPath();
-        int status = javac.run(null, null, null, "-cp", contract, "-d", classes.toString(),
-                src.resolve("ThrowingPlugin.java").toString());
-        assertEquals(0, status, "the fixture compiles");
-
-        Path services = Files.createDirectories(classes.resolve("META-INF/services"));
-        Files.writeString(services.resolve("com.botmaker.plugin.api.StudioPlugin"),
-                "p.ThrowingPlugin\n" + Stub.class.getName() + "\n");
+    void a_plugin_whose_constructor_throws_is_reported_by_what_it_threw(@TempDir Path dir) throws IOException {
+        Path classes = declare(compile(dir, contractPath(), Map.of("p/ThrowingPlugin.java",
+                "package p; import com.botmaker.plugin.api.*; public final class ThrowingPlugin extends DeclaredPlugin {"
+                        + " public ThrowingPlugin() { super(StudioPlugin.declare());"
+                        + " if (true) throw new IllegalStateException(\"no display\"); } }")),
+                "throwing", "p.ThrowingPlugin");
 
         PluginLoader.Loaded loaded = PluginLoader.openReporting(List.of(classes.toString()));
+
+        assertNull(loaded.loader());
+        assertEquals(List.of("p.ThrowingPlugin — no display"),
+                loaded.failures().stream().map(PluginLoader.PluginFailure::describe).toList());
+    }
+
+    // ---- one jar, one plugin ----
+
+    @Test
+    void a_jar_whose_poms_name_two_plugins_is_refused_whole(@TempDir Path dir) throws IOException {
+        Path classes = compile(dir, contractPath(), Map.ofEntries(plugin("One"), plugin("Two")));
+        Path shaded = jar(dir.resolve("shaded.jar"), Map.of(
+                "p/One.class", bytes(classes.resolve("p/One.class")),
+                "p/Two.class", bytes(classes.resolve("p/Two.class")),
+                "META-INF/maven/test/one/pom.xml", pom("test", "one", "p.One", null),
+                "META-INF/maven/test/two/pom.xml", pom("test", "two", "p.Two", null)));
+
+        PluginLoader.Loaded loaded = PluginLoader.openReporting(List.of(shaded.toString()));
+
+        assertNull(loaded.loader());
+        assertEquals(1, loaded.failures().size());
+        String line = loaded.failures().getFirst().describe();
+        assertTrue(line.startsWith("shaded.jar — its poms name 2 plugins ("), line);
+        assertTrue(line.endsWith("one jar is one plugin, so none of them is loaded"), line);
+    }
+
+    @Test
+    void a_second_jar_with_the_same_coordinate_is_refused(@TempDir Path dir) throws IOException {
+        Path first = declare(compile(dir.resolve("a"), contractPath(), Map.ofEntries(plugin("One"))), "same", "p.One");
+        Path second = declare(compile(dir.resolve("b"), contractPath(), Map.ofEntries(plugin("Two"))), "same", "p.Two");
+
+        PluginLoader.Loaded loaded = PluginLoader.openReporting(List.of(first.toString(), second.toString()));
         try (PluginLoader plugins = loaded.loader()) {
             assertNotNull(plugins);
-            assertEquals(List.of("test.stub"), plugins.plugins().stream().map(p -> p.id()).toList());
+            assertEquals(List.of("p.One"), plugins.plugins().stream()
+                    .map(p -> p.plugin().getClass().getName()).toList());
             assertEquals(1, loaded.failures().size());
-            // Here the provider's own type IS known — it loaded, it just would not construct.
-            assertEquals("p.ThrowingPlugin", loaded.failures().get(0).provider());
+            assertEquals("p.Two", loaded.failures().getFirst().provider());
+            assertTrue(loaded.failures().getFirst().describe().contains("is test:same"),
+                    loaded.failures().getFirst().describe());
         }
     }
 
-    /** A classpath nothing loads from still says why, which is the half {@code open} drops. */
+    /** A coordinate is claimed only by an entry that loads: a refused first copy leaves room for a good second. */
     @Test
-    @Timeout(30)
-    void a_classpath_whose_only_plugin_is_broken_answers_no_loader_and_one_failure(@TempDir Path dir)
-            throws IOException {
-        Path classes = compileBrokenPlugin(dir);
-        Files.writeString(classes.resolve("META-INF/services/com.botmaker.plugin.api.StudioPlugin"),
-                "p.BrokenPlugin\n");
+    void a_copy_refused_for_its_contract_does_not_shadow_a_good_one(@TempDir Path dir) throws IOException {
+        Path stub = compile(dir.resolve("stub"), null, Map.of("com/botmaker/plugin/api/Later.java",
+                "package com.botmaker.plugin.api; public final class Later { public static int soon() { return 1; } }"));
+        Path newer = compile(dir.resolve("newer"), stub + java.io.File.pathSeparator + contractPath(), Map.of(
+                "p/One.java", "package p; import com.botmaker.plugin.api.*; public final class One extends DeclaredPlugin {"
+                        + " public One() { super(StudioPlugin.declare()); Later.soon(); } }"));
+        Path good = compile(dir.resolve("good"), contractPath(), Map.ofEntries(plugin("Two")));
 
-        PluginLoader.Loaded loaded = PluginLoader.openReporting(List.of(classes.toString()));
-
-        assertNull(loaded.loader(), "no plugin loaded, so the caller must fall back to the bundled set");
-        assertEquals(1, loaded.failures().size());
+        PluginLoader.Loaded loaded = PluginLoader.openReporting(List.of(
+                declare(newer, "same", "p.One").toString(), declare(good, "same", "p.Two").toString()));
+        try (PluginLoader plugins = loaded.loader()) {
+            assertNotNull(plugins);
+            assertEquals(List.of("p.Two"), plugins.plugins().stream()
+                    .map(p -> p.plugin().getClass().getName()).toList());
+            assertEquals(List.of("p.One"), loaded.failures().stream().map(PluginLoader.PluginFailure::provider).toList());
+        }
     }
 
-    /**
-     * A plugin compiled against a superclass whose {@code .class} is then deleted — exactly the state a jar
-     * resolved without its own dependency is in, and how the 2026-08-28 non-transitive toolkit failed.
-     */
-    private static Path compileBrokenPlugin(Path dir) throws IOException {
-        JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
-        assumeTrue(javac != null, "no javac in this JRE");
+    @Test
+    void an_entry_listed_twice_is_one_plugin(@TempDir Path dir) throws IOException {
+        Path classes = declare(compile(dir, contractPath(), Map.ofEntries(plugin("Good"))), "good", "p.Good");
 
-        Path src = Files.createDirectories(dir.resolve("src/p"));
-        Files.writeString(src.resolve("Helper.java"),
-                "package p; public abstract class Helper { public String name() { return \"broken\"; } }");
-        Files.writeString(src.resolve("BrokenPlugin.java"),
-                "package p; public final class BrokenPlugin extends Helper"
-                        + " implements com.botmaker.plugin.api.StudioPlugin {"
-                        + " @Override public String id() { return name(); } }");
+        PluginLoader.Loaded loaded = PluginLoader.openReporting(List.of(classes.toString(), classes + "/."));
+        try (PluginLoader plugins = loaded.loader()) {
+            assertEquals(1, plugins.plugins().size());
+            assertEquals(List.of(), loaded.failures());
+        }
+    }
 
-        Path classes = Files.createDirectories(dir.resolve("classes"));
-        String contract = StudioPlugin.class.getProtectionDomain().getCodeSource().getLocation().getPath();
-        int status = javac.run(null, null, null, "-cp", contract, "-d", classes.toString(),
-                src.resolve("Helper.java").toString(), src.resolve("BrokenPlugin.java").toString());
-        assertEquals(0, status, "the fixture compiles");
+    @Test
+    void a_pom_that_names_a_plugin_but_cannot_be_used_is_reported(@TempDir Path dir) throws IOException {
+        Path broken = jar(dir.resolve("broken.jar"), Map.of(
+                "META-INF/maven/test/broken/pom.xml", pom("test", "broken", "${nowhere}", null)));
 
-        Files.delete(classes.resolve("p/Helper.class"));
-        Files.createDirectories(classes.resolve("META-INF/services"));
-        return classes;
+        PluginLoader.Loaded loaded = PluginLoader.openReporting(List.of(broken.toString()));
+
+        assertNull(loaded.loader());
+        assertEquals(List.of("broken.jar — broken.jar!/META-INF/maven/test/broken/pom.xml's botmaker.plugin is"
+                        + " ${nowhere}, which nothing resolved: write the class's name itself"),
+                loaded.failures().stream().map(PluginLoader.PluginFailure::describe).toList());
+    }
+
+    @Test
+    void the_named_class_must_be_a_public_final_direct_declared_plugin(@TempDir Path dir) throws IOException {
+        Path classes = compile(dir, contractPath(), Map.of(
+                "p/Plain.java", "package p; public final class Plain { }",
+                "p/Open.java", "package p; import com.botmaker.plugin.api.*; public class Open extends DeclaredPlugin {"
+                        + " public Open() { super(StudioPlugin.declare()); } }"));
+        Path plain = Files.createDirectories(dir.resolve("plain"));
+        Path open = Files.createDirectories(dir.resolve("open"));
+        Path plainJar = jar(plain.resolve("plain.jar"), Map.of("p/Plain.class", bytes(classes.resolve("p/Plain.class")),
+                "META-INF/maven/test/plain/pom.xml", pom("test", "plain", "p.Plain", null)));
+        Path openJar = jar(open.resolve("open.jar"), Map.of("p/Open.class", bytes(classes.resolve("p/Open.class")),
+                "META-INF/maven/test/open/pom.xml", pom("test", "open", "p.Open", null)));
+
+        PluginLoader.Loaded loaded = PluginLoader.openReporting(List.of(plainJar.toString(), openJar.toString()));
+
+        assertNull(loaded.loader());
+        assertEquals(List.of("p.Plain — p.Plain does not extend DeclaredPlugin",
+                        "p.Open — p.Open is not a public final class"),
+                loaded.failures().stream().map(PluginLoader.PluginFailure::describe).toList());
+    }
+
+    @Test
+    void the_named_class_must_be_in_the_jar_that_names_it(@TempDir Path dir) throws IOException {
+        Path elsewhere = compile(dir.resolve("elsewhere"), contractPath(), Map.ofEntries(plugin("Good")));
+        Path naming = jar(dir.resolve("naming.jar"), Map.of(
+                "META-INF/maven/test/naming/pom.xml", pom("test", "naming", "p.Good", null)));
+        Path missing = jar(dir.resolve("missing.jar"), Map.of(
+                "META-INF/maven/test/missing/pom.xml", pom("test", "missing", "p.Nowhere", null)));
+
+        PluginLoader.Loaded loaded = PluginLoader.openReporting(
+                List.of(naming.toString(), missing.toString(), elsewhere.toString()));
+
+        assertNull(loaded.loader());
+        assertEquals(List.of("p.Good — the pom's botmaker.plugin names p.Good, which is not in naming.jar:"
+                        + " a plugin's class is in its own jar",
+                        "p.Nowhere — the pom's botmaker.plugin names p.Nowhere, which is not in missing.jar"),
+                loaded.failures().stream().map(PluginLoader.PluginFailure::describe).toList());
     }
 
     @Test
     void a_missing_classpath_entry_does_not_lose_the_rest(@TempDir Path dir) throws IOException {
-        Path services = dir.resolve("META-INF/services");
-        Files.createDirectories(services);
-        Files.writeString(services.resolve("com.botmaker.plugin.api.StudioPlugin"),
-                Stub.class.getName() + "\n");
+        Path classes = declare(compile(dir, contractPath(), Map.ofEntries(plugin("Good"))), "good", "p.Good");
 
         try (PluginLoader loaded = PluginLoader.open(
-                List.of("", dir.resolve("gone.jar").toString(), dir.toString()))) {
+                List.of("", dir.resolve("gone.jar").toString(), classes.toString()))) {
             assertNotNull(loaded);
             assertEquals(1, loaded.plugins().size());
         }
+    }
+
+    /**
+     * A plugin compiled against a superclass whose {@code .class} is then deleted — exactly the state a jar
+     * resolved without its own dependency is in. The helper is a SUPERCLASS: a missing class named only inside a
+     * method body resolves lazily and would not reproduce it.
+     */
+    private static Path brokenPlugin(Path dir) throws IOException {
+        Path classes = compile(dir, contractPath(), Map.of(
+                "p/Helper.java", "package p; import com.botmaker.plugin.api.*;"
+                        + " public abstract class Helper extends DeclaredPlugin {"
+                        + " protected Helper() { super(StudioPlugin.declare()); } }",
+                "p/BrokenPlugin.java", "package p; public final class BrokenPlugin extends Helper { }"));
+        Files.delete(classes.resolve("p/Helper.class"));
+        return declare(classes, "broken", "p.BrokenPlugin");
+    }
+
+    private static List<String> coordinates(PluginLoader loader) {
+        return loader.plugins().stream().map(p -> p.coordinate().toString()).toList();
     }
 }

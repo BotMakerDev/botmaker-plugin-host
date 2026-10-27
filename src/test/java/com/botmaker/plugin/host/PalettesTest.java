@@ -31,7 +31,7 @@ class PalettesTest {
         Path jar = jar(compile(dir, "PaletteCatalog.empty()"), dir.resolve("plugin.jar"));
         try (PluginLoader loader = PluginLoader.open(List.of(jar.toString()))) {
             assertNotNull(loader);
-            PaletteCatalog palette = Palettes.of(loader.plugins().getFirst());
+            PaletteCatalog palette = Palettes.of(loader.plugins().getFirst().plugin());
             assertEquals(List.of(), palette.problems());
             assertEquals(List.of("p.Api", "p.Other"), names(palette), "p.Plain carries no @Palette");
             assertEquals(List.of("greet"), palette.facades().getFirst().members().stream()
@@ -44,7 +44,7 @@ class PalettesTest {
         Path classes = compile(dir, "PaletteCatalog.empty()");
         try (PluginLoader loader = PluginLoader.open(List.of(classes.toString()))) {
             assertNotNull(loader);
-            assertEquals(List.of("p.Api", "p.Other"), names(Palettes.of(loader.plugins().getFirst())));
+            assertEquals(List.of("p.Api", "p.Other"), names(Palettes.of(loader.plugins().getFirst().plugin())));
         }
     }
 
@@ -54,7 +54,7 @@ class PalettesTest {
         Path classes = compile(dir, "PaletteCatalog.of(p.Other.class)");
         try (PluginLoader loader = PluginLoader.open(List.of(classes.toString()))) {
             assertNotNull(loader);
-            assertEquals(List.of("p.Other"), names(Palettes.of(loader.plugins().getFirst())));
+            assertEquals(List.of("p.Other"), names(Palettes.of(loader.plugins().getFirst().plugin())));
         }
     }
 
@@ -79,10 +79,10 @@ class PalettesTest {
         Files.writeString(src.resolve("Plain.java"), "package p; public final class Plain { }");
         Files.writeString(src.resolve("ThePlugin.java"), """
                 package p;
+                import com.botmaker.plugin.api.*;
                 import com.botmaker.plugin.api.catalog.PaletteCatalog;
-                public final class ThePlugin implements com.botmaker.plugin.api.StudioPlugin {
-                    @Override public String id() { return "test.palette"; }
-                    @Override public PaletteCatalog catalog() { return %s; }
+                public final class ThePlugin extends DeclaredPlugin {
+                    public ThePlugin() { super(StudioPlugin.declare().catalog(() -> %s)); }
                 }
                 """.formatted(catalogExpression));
 
@@ -95,9 +95,7 @@ class PalettesTest {
         // A fixture that stops compiling is this test failing, never a reason to skip it.
         assertEquals(0, javac.run(null, null, null, args.toArray(String[]::new)), "the fixture compiles");
 
-        Path services = Files.createDirectories(classes.resolve("META-INF/services"));
-        Files.writeString(services.resolve(StudioPlugin.class.getName()), "p.ThePlugin\n");
-        return classes;
+        return PluginFixtures.declare(classes, "palette", "p.ThePlugin");
     }
 
     private static Path jar(Path classes, Path jar) throws IOException {

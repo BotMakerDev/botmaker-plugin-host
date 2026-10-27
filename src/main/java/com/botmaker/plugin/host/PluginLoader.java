@@ -1,30 +1,25 @@
 package com.botmaker.plugin.host;
 
+import com.botmaker.plugin.api.DeclaredPlugin;
 import com.botmaker.plugin.api.StudioPlugin;
 
 import java.io.Closeable;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Modifier;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.security.CodeSource;
 import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.ServiceConfigurationError;
-import java.util.ServiceLoader;
 import java.util.Set;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
 /**
  * The plugins on <em>one project's</em> resolved classpath, loaded from that project's own jars.
@@ -39,13 +34,22 @@ import java.util.zip.ZipFile;
  * <em>exactly</em> as Studio does, and the delegation split below is the last code in this project that
  * should exist in two copies.
  *
- * <h2>Nothing here reflects on a plugin's own classes</h2>
+ * <h2>A plugin is its jar, and its pom names it (2026-10-27)</h2>
  *
- * <p>{@link ServiceLoader#load(Class, ClassLoader)} hands back instances <em>typed as</em>
- * {@link StudioPlugin}, so every later call — {@code id()}, {@code catalog(pin)}, {@code valueTypes()} — is
- * an ordinary javac-checked one. Reflection happens once, inside {@code ServiceLoader}, to invoke a no-arg
- * constructor. A host never names a plugin's implementation class, and the rule that keeps that safe is
- * already true of this project: <b>every type crossing the boundary is a contract type or a JDK type.</b>
+ * <p>Until 2026-10-27 a plugin was whatever a {@code META-INF/services} file listed, and that file is a list: a
+ * jar could declare two plugins, and two jars could answer one {@code id()}, with nothing to say so. Now each
+ * entry's poms are read ({@link PluginPoms}) before any of its code runs. An entry whose poms name no class is a
+ * library; one whose poms name two is refused; two entries with one coordinate are refused; an entry built
+ * against a contract this host lacks is refused ({@link ContractLinks}). What is left is constructed: the named
+ * class, which must be in that entry, extend {@link DeclaredPlugin} directly, be {@code public final} and have a
+ * public no-argument constructor. Each answer is a {@link LoadedPlugin}, so the coordinate, name and jar travel
+ * with the instance.
+ *
+ * <h2>Nothing here reflects on a plugin beyond its constructor</h2>
+ *
+ * <p>The instance is typed as {@link StudioPlugin}, so every later call is an ordinary javac-checked one. A host
+ * never names a plugin's implementation class, and the rule that keeps that safe is already true of this
+ * project: <b>every type crossing the boundary is a contract type or a JDK type.</b>
  *
  * <h2>The delegation split is the load-bearing part, and it is not the JDK default</h2>
  *
@@ -81,9 +85,9 @@ public final class PluginLoader implements Closeable {
             List.of("com.botmaker.plugin.api.", "java.", "javax.", "javafx.", "jdk.", "sun.");
 
     private final URLClassLoader loader;
-    private final List<StudioPlugin> plugins;
+    private final List<LoadedPlugin> plugins;
 
-    private PluginLoader(URLClassLoader loader, List<StudioPlugin> plugins) {
+    private PluginLoader(URLClassLoader loader, List<LoadedPlugin> plugins) {
         this.loader = loader;
         this.plugins = plugins;
     }
@@ -94,8 +98,7 @@ public final class PluginLoader implements Closeable {
      * <p>The cause is kept whole rather than rendered, because the two readers want different amounts of it:
      * a dialog wants one line, a {@code --verbose} CLI wants the stack. {@link #describe()} is the one line.
      *
-     * @param provider the implementation class named by the services file, or a description of the failure
-     *                 when the name is what could not be read
+     * @param provider the plugin's class as its pom names it, or its jar when the class is not what is wrong
      */
     public record PluginFailure(String provider, Throwable cause) {
 
@@ -106,14 +109,10 @@ public final class PluginLoader implements Closeable {
         /**
          * {@code <provider> — <the cause's own message>}, which is what a user is shown. A
          * {@link NoClassDefFoundError} names only the class that was missing, so the line says what that
-         * means: {@code a plugin — p/Helper is not on the classpath}.
+         * means: {@code p.Broken — p/Helper is not on the classpath}.
          *
-         * <p><b>The missing class is looked for down the cause chain, not only at the top</b> (2026-09-21).
-         * Up to JDK 25 {@code ServiceLoader} let a {@code LinkageError} out of {@code Class.forName} raw, so
-         * the missing superclass <i>was</i> the top exception. From JDK 27 it wraps it in a
-         * {@code ServiceConfigurationError} — which is better, since that one names the provider line the
-         * raw error never said — and the class a user actually has to put back was suddenly two words in a
-         * cause nobody prints. Same line on both.
+         * <p><b>The missing class is looked for down the cause chain, not only at the top</b> (2026-09-21): a
+         * wrapper names the plugin, and the class a user actually has to put back is a cause nobody prints.
          */
         public String describe() {
             NoClassDefFoundError missing = missingClass(cause);
@@ -172,10 +171,8 @@ public final class PluginLoader implements Closeable {
      * Loads every plugin declared on {@code classpath}, or {@code null} when there is nothing to load or
      * nothing loadable.
      *
-     * <p>Null rather than an empty loader on purpose: the caller's fallback is the bundled plugin set, and a
-     * project whose classpath resolved to nothing must get the bundled menus rather than none. Every failure
-     * here is one of those — an unresolvable pin, a jar with no services file, a plugin whose constructor
-     * throws — and each is logged and answered the same way.
+     * <p>Null rather than an empty loader on purpose: a host holds no classloader for a project that has no
+     * plugin, so there is nothing to close.
      *
      * <p>Use {@link #openReporting} where the failures are worth telling somebody about; this is the same
      * pass with them dropped.
@@ -187,91 +184,46 @@ public final class PluginLoader implements Closeable {
     /**
      * {@link #open}, and what did not load beside it.
      *
-     * <h2>Isolation is per provider, and until 2026-09-06 it was per classpath</h2>
+     * <p><b>Isolation is per plugin.</b> Each refusal and each failure to construct is one
+     * {@link PluginFailure}, and every other plugin still loads. A class that cannot be resolved throws
+     * {@link NoClassDefFoundError} — the ordinary shape of a plugin whose own dependency is not on the classpath —
+     * and a constructor that links an {@code optional} dependency throws while constructing (SDK v1.1.5); both are
+     * caught. {@code LinkageError} rather than {@code Error}: a broken plugin must not make an
+     * {@link OutOfMemoryError} look like a missing class.
      *
-     * <p>The loop used to be one {@code for} over {@link ServiceLoader} inside one {@code try}, so the first
-     * provider that would not load <b>ended the iteration</b> and every plugin after it in the services file
-     * was silently absent. With one plugin in the world that was invisible; with two it is the difference
-     * between "the SDK is broken" and "nothing works".
+     * <p><b>A plugin built for another contract is refused before it is constructed (2026-09-28)</b>, with
+     * {@link ContractLinks.Direction which side is behind} (2026-09-29), rather than a {@link NoSuchMethodError}
+     * the first time the missing member is reached. The entry stays on the classpath, because another plugin may
+     * depend on its classes; only it is not constructed.
      *
-     * <p>So the failure is caught in two places, because a plugin can fail at two moments and they are not
-     * the same moment. <b>Advancing the iterator</b> is where {@code Class.forName} runs, which is where a
-     * missing superclass throws {@link NoClassDefFoundError} — the ordinary shape of a plugin whose own
-     * dependency is not on the classpath. <b>{@code Provider.get()}</b> is where the no-arg constructor runs,
-     * which is where a constructor that links an {@code optional} dependency throws — the shape that shipped
-     * as SDK v1.1.5. The iterator keeps going after either.
-     *
-     * <p>{@code LinkageError} rather than {@code Error}: a broken plugin must not make an
-     * {@link OutOfMemoryError} look like a missing services file.
-     *
-     * <h2>A plugin built for a newer contract is refused before it is constructed (2026-09-28)</h2>
-     *
-     * <p>Each entry that declares a plugin is read by {@link ContractLinks#missing} against the host's own
-     * contract, and a provider from an entry that links something the host lacks is a failure,
-     * <i>built for a newer Studio: needs …</i>, rather than a {@link NoSuchMethodError} the first time the
-     * missing member is reached. The entry stays on the classpath, because another plugin may depend on its
-     * classes; only its own providers are skipped.
-     *
-     * <p><b>And for an older one, named from its services file (2026-09-29).</b> The first real mismatch ran the
-     * other way — an SDK built on a contract that has since deleted what it extends — and there the provider
-     * never resolves: {@code ServiceLoader} throws for a missing contract class, naming neither the provider nor
-     * the contract. So a mismatched entry's providers are reported by the names its services file lists, with
-     * {@link ContractLinks.Direction which side is behind}, and the loader's own error for them is dropped.
+     * <p>Nothing is printed: every failure is in the answer, and the host shows it.
      */
     public static Loaded openReporting(List<String> classpath) {
         if (classpath == null || classpath.isEmpty()) return new Loaded(null, List.of());
-        URL[] urls = urlsOf(classpath);
-        if (urls.length == 0) return new Loaded(null, List.of());
+        List<Path> entries = entriesOf(classpath);
+        if (entries.isEmpty()) return new Loaded(null, List.of());
 
-        URLClassLoader loader = new Inverted(urls, PluginLoader.class.getClassLoader());
-        List<StudioPlugin> found = new ArrayList<>();
         List<PluginFailure> failures = new ArrayList<>();
-        Map<Path, ContractLinks.ContractMismatch> mismatched = mismatches(classpath);
-        Set<String> unlinked = new HashSet<>();
-        for (Map.Entry<Path, ContractLinks.ContractMismatch> each : mismatched.entrySet()) {
-            // Reported from the services file, by name, before anything is loaded: a provider that extends a
-            // contract type the host no longer has cannot even be resolved, and the loader's own error for it
-            // names neither the provider nor the contract.
-            for (String name : providerNames(each.getKey())) failures.add(new PluginFailure(name, each.getValue()));
-            for (ContractLinks.Link link : each.getValue().missing()) unlinked.add(link.owner());
-        }
+        List<Declared> declared = declared(entries, failures);
+        if (declared.isEmpty()) return new Loaded(null, failures);
 
-        Iterator<ServiceLoader.Provider<StudioPlugin>> providers =
-                ServiceLoader.load(StudioPlugin.class, loader).stream().iterator();
-        while (true) {
-            ServiceLoader.Provider<StudioPlugin> provider;
-            try {
-                if (!providers.hasNext()) break;
-                provider = providers.next();
-            } catch (ServiceConfigurationError | LinkageError | RuntimeException e) {
-                NoClassDefFoundError missing = PluginFailure.missingClass(e);
-                if (missing != null && !mismatched.isEmpty() && (unlinked.contains(missing.getMessage())
-                        || missing.getMessage().startsWith(ContractLinks.CONTRACT))) {
-                    continue;                                   // the entry's mismatch, reported above
+        URLClassLoader loader = new Inverted(urlsOf(entries), PluginLoader.class.getClassLoader());
+        List<LoadedPlugin> found = new ArrayList<>();
+        try {
+            for (Declared each : declared) {
+                String name = each.pom().pluginClass();
+                try {
+                    found.add(new LoadedPlugin(each.pom().coordinate(), each.pom().name(), each.entry(),
+                            construct(loader, each.entry(), name)));
+                } catch (InvocationTargetException e) {
+                    failures.add(new PluginFailure(name, e.getCause() == null ? e : e.getCause()));
+                } catch (ReflectiveOperationException | LinkageError | RuntimeException e) {
+                    failures.add(new PluginFailure(name, e));
                 }
-                // The services file named a class that could not be resolved. ServiceLoader has already
-                // consumed that line, so the next hasNext() reads the next one — which is what makes this a
-                // `continue` rather than a `break`, and what `a_broken_plugin_does_not_cost_the_others`
-                // holds. Which line it was is not recoverable here: a ServiceConfigurationError names the
-                // provider in its message, but a LinkageError (the provider's superclass missing, which is
-                // the archetype's shape) names only the class that was missing — `p/Helper`, not
-                // `p.BrokenPlugin`. That is still the thing to fix, so it is what the failure says, and
-                // PluginFailure.describe reads it wherever the running JDK put it: raw up to JDK 25, inside
-                // a ServiceConfigurationError from JDK 27.
-                failures.add(new PluginFailure(null, e));
-                continue;
             }
-            if (mismatched.containsKey(entryOf(provider))) continue;                        // reported above
-            try {
-                found.add(provider.get());
-            } catch (ServiceConfigurationError | LinkageError | RuntimeException e) {
-                failures.add(new PluginFailure(provider.type().getName(), e));
-            }
-        }
-
-        for (PluginFailure failure : failures) {
-            System.err.println("Warning: could not load a plugin from the project classpath: "
-                    + failure.describe());
+        } catch (Error fatal) {
+            close(loader);                                  // never leave the jars held behind an OutOfMemoryError
+            throw fatal;
         }
         if (found.isEmpty()) {
             close(loader);
@@ -280,7 +232,8 @@ public final class PluginLoader implements Closeable {
         return new Loaded(new PluginLoader(loader, List.copyOf(found)), failures);
     }
 
-    public List<StudioPlugin> plugins() {
+    /** Every plugin this loader constructed, each with its coordinate, name and jar. */
+    public List<LoadedPlugin> plugins() {
         return plugins;
     }
 
@@ -317,83 +270,125 @@ public final class PluginLoader implements Closeable {
         return false;
     }
 
+    /** A classpath entry whose one pom names a plugin, about to be constructed. */
+    private record Declared(Path entry, PluginPoms.PluginPom pom) {
+    }
+
     /**
-     * Each classpath entry that declares a plugin and links something the host's contract lacks, with what it
-     * lacks and which side is behind. Entries that declare no plugin are not read: a library's links are its
-     * plugin's business.
+     * The entries that declare exactly one plugin, each coordinate once, each linking only what the host's
+     * contract has; every other declaring entry is a failure, worded by what is wrong with it.
      */
-    private static Map<Path, ContractLinks.ContractMismatch> mismatches(List<String> classpath) {
-        Map<Path, ContractLinks.ContractMismatch> mismatched = new LinkedHashMap<>();
+    private static List<Declared> declared(List<Path> entries, List<PluginFailure> failures) {
+        List<Declared> declared = new ArrayList<>();
+        Map<PluginCoordinate, Path> seen = new HashMap<>();
         ClassLoader contract = StudioPlugin.class.getClassLoader();
-        for (String entry : classpath) {
-            if (entry == null || entry.isBlank()) continue;
-            Path path;
-            try {
-                path = Path.of(entry).toAbsolutePath().normalize();
-            } catch (RuntimeException notAPath) {
-                continue;                                   // urlsOf has already said so
+        for (Path entry : entries) {
+            PluginPoms.Found found = PluginPoms.find(entry);
+            for (String problem : found.problems()) {
+                failures.add(new PluginFailure(entry.getFileName().toString(), new IllegalStateException(problem)));
             }
-            if (!ContractLinks.declaresPlugin(path)) continue;
-            List<ContractLinks.Link> missing = ContractLinks.missing(path, contract);
-            if (!missing.isEmpty()) mismatched.put(path, ContractLinks.mismatch(path, missing));
+            List<PluginPoms.PluginPom> poms = found.poms();
+            if (poms.isEmpty()) continue;
+            if (poms.size() > 1) {
+                failures.add(new PluginFailure(entry.getFileName().toString(), new IllegalStateException(
+                        "its poms name " + poms.size() + " plugins (" + String.join(", ", poms.stream()
+                                .map(PluginPoms.PluginPom::pluginClass).toList())
+                                + "); one jar is one plugin, so none of them is loaded")));
+                continue;
+            }
+            PluginPoms.PluginPom pom = poms.getFirst();
+            Path first = seen.get(pom.coordinate());
+            if (first != null) {
+                failures.add(new PluginFailure(pom.pluginClass(), new IllegalStateException(
+                        entry.getFileName() + " is " + pom.coordinate() + ", which " + first.getFileName()
+                                + " already is")));
+                continue;
+            }
+            List<ContractLinks.Link> missing = ContractLinks.missing(entry, contract);
+            if (!missing.isEmpty()) {
+                // Not claimed: a later entry with this coordinate that this host can load is the one to keep.
+                failures.add(new PluginFailure(pom.pluginClass(), ContractLinks.mismatch(entry, missing)));
+                continue;
+            }
+            seen.put(pom.coordinate(), entry);
+            declared.add(new Declared(entry, pom));
         }
-        return mismatched;
+        return declared;
     }
 
-    /** The provider class names {@code entry}'s services file lists, comments and blanks dropped. */
-    static List<String> providerNames(Path entry) {
-        String text;
+    /**
+     * The plugin {@code name} names, constructed: the class must be {@code entry}'s own, a direct
+     * {@code public final} subclass of {@link DeclaredPlugin}, with a public no-argument constructor.
+     */
+    private static StudioPlugin construct(ClassLoader loader, Path entry, String name)
+            throws ReflectiveOperationException {
+        Class<?> type;
         try {
-            if (Files.isDirectory(entry)) {
-                text = Files.readString(entry.resolve(ContractLinks.SERVICES));
-            } else {
-                try (ZipFile zip = new ZipFile(entry.toFile())) {
-                    ZipEntry services = zip.getEntry(ContractLinks.SERVICES);
-                    if (services == null) return List.of();
-                    try (InputStream in = zip.getInputStream(services)) {
-                        text = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-                    }
-                }
-            }
-        } catch (IOException | RuntimeException e) {
-            return List.of();
+            type = Class.forName(name, false, loader);
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException("the pom's " + PluginPoms.PROPERTY + " names " + name
+                    + ", which is not in " + entry.getFileName(), e);
         }
-        return text.lines()
-                .map(line -> line.replaceFirst("#.*", "").strip())
-                .filter(line -> !line.isEmpty())
-                .toList();
+        if (!entry.equals(entryOf(type))) {
+            throw new IllegalStateException("the pom's " + PluginPoms.PROPERTY + " names " + name
+                    + ", which is not in " + entry.getFileName() + ": a plugin's class is in its own jar");
+        }
+        if (type.getSuperclass() != DeclaredPlugin.class) {
+            throw new IllegalStateException(name + " does not extend DeclaredPlugin");
+        }
+        int modifiers = type.getModifiers();
+        if (!Modifier.isPublic(modifiers) || !Modifier.isFinal(modifiers)) {
+            throw new IllegalStateException(name + " is not a public final class");
+        }
+        return (StudioPlugin) type.getConstructor().newInstance();
     }
 
-    /** The classpath entry {@code provider}'s class was read from, or null when it cannot be told. */
-    private static Path entryOf(ServiceLoader.Provider<StudioPlugin> provider) {
+    /** The classpath entry {@code type} was read from, or null when it cannot be told. */
+    private static Path entryOf(Class<?> type) {
         try {
-            CodeSource source = provider.type().getProtectionDomain().getCodeSource();
+            CodeSource source = type.getProtectionDomain().getCodeSource();
             return source == null ? null : Path.of(source.getLocation().toURI()).toAbsolutePath().normalize();
         } catch (URISyntaxException | RuntimeException e) {
             return null;
         }
     }
 
+    /**
+     * Each entry as an absolute path. A blank or unparseable one is skipped: a classpath entry that is not a path
+     * is not a reason to lose the rest of the classpath, and no plugin can be read from it.
+     */
+    private static List<Path> entriesOf(List<String> classpath) {
+        Set<Path> entries = new LinkedHashSet<>();          // an entry listed twice is one entry, not a duplicate plugin
+        for (String entry : classpath) {
+            if (entry == null || entry.isBlank()) continue;
+            try {
+                entries.add(Path.of(entry).toAbsolutePath().normalize());
+            } catch (InvalidPathException e) {
+                // skipped, as above
+            }
+        }
+        return List.copyOf(entries);
+    }
+
+    private static URL[] urlsOf(List<Path> entries) {
+        List<URL> urls = new ArrayList<>(entries.size());
+        for (Path entry : entries) {
+            try {
+                urls.add(entry.toUri().toURL());
+            } catch (MalformedURLException e) {
+                // A path the JDK made cannot be a malformed URL; nothing to load from it if it were.
+            }
+        }
+        return urls.toArray(URL[]::new);
+    }
+
     private static void close(URLClassLoader loader) {
         try {
             loader.close();
         } catch (Exception e) {
-            System.err.println("Warning: could not close the plugin classloader: " + e);
+            // Closing releases file handles; one that will not close holds a jar until exit, and says so nowhere
+            // a user could act on.
         }
-    }
-
-    private static URL[] urlsOf(List<String> classpath) {
-        List<URL> urls = new ArrayList<>(classpath.size());
-        for (String entry : classpath) {
-            if (entry == null || entry.isBlank()) continue;
-            try {
-                urls.add(new File(entry).toURI().toURL());
-            } catch (MalformedURLException e) {
-                // A classpath entry that is not a path is not a reason to lose the rest of the classpath.
-                System.err.println("Warning: skipping classpath entry " + entry + ": " + e.getMessage());
-            }
-        }
-        return urls.toArray(URL[]::new);
     }
 
     /** The inverted-delegation loader described in the class javadoc. */

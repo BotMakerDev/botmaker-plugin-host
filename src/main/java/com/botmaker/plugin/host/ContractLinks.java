@@ -75,9 +75,6 @@ public final class ContractLinks {
     /** The contract's package in class-file spelling. */
     static final String CONTRACT = "com/botmaker/plugin/api/";
 
-    /** The services file whose presence makes a classpath entry a plugin. */
-    static final String SERVICES = "META-INF/services/com.botmaker.plugin.api.StudioPlugin";
-
     private static final int PUBLIC = 0x0001;
     private static final int PROTECTED = 0x0004;
 
@@ -260,18 +257,6 @@ public final class ContractLinks {
         if (!m.find()) return null;
         String pin = m.group(1).trim();
         return pin.startsWith("${") || pin.endsWith("-SNAPSHOT") ? null : pin;
-    }
-
-    /** Whether {@code entry}, a jar or a class directory, declares a {@code StudioPlugin}. */
-    public static boolean declaresPlugin(Path entry) {
-        if (entry == null) return false;
-        if (Files.isDirectory(entry)) return Files.isRegularFile(entry.resolve(SERVICES));
-        if (!Files.isRegularFile(entry)) return false;
-        try (ZipFile zip = new ZipFile(entry.toFile())) {
-            return zip.getEntry(SERVICES) != null;
-        } catch (IOException e) {
-            return false;
-        }
     }
 
     /**
