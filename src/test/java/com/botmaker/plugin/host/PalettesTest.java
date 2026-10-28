@@ -82,7 +82,10 @@ class PalettesTest {
                 import com.botmaker.plugin.api.*;
                 import com.botmaker.plugin.api.catalog.PaletteCatalog;
                 public final class ThePlugin extends DeclaredPlugin {
-                    public ThePlugin() { super(StudioPlugin.declare().catalog(() -> %s)); }
+                    public ThePlugin() { super(StudioPlugin.declare().catalog(Catalog.class)); }
+                }
+                final class Catalog implements CatalogHolder {
+                    @Override public PaletteCatalog catalog() { return %s; }
                 }
                 """.formatted(catalogExpression));
 
