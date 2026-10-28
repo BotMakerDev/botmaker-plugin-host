@@ -88,8 +88,8 @@ class ContractLinksTest {
                         + " public Current() { super(StudioPlugin.declare()); }"
                         + " String id() { return \"test.current\"; }"
                         + " ToolbarItem item() { return ToolbarItem.id(\"x\").label(\"x\").tooltip(\"y\")"
-                        + " .in(ToolbarGroup.TOOLS, 1).enabledWhen(EnabledWhen.ALWAYS).onPress(() -> c -> { }); }"
-                        + " String name() { return ToolbarGroup.TOOLS.name() + id().hashCode(); } }"));
+                        + " .onBar(1).enabledWhen(EnabledWhen.ALWAYS).onPress(() -> c -> { }); }"
+                        + " String name() { return ToolbarItem.Place.BAR.name() + id().hashCode(); } }"));
 
         assertEquals(List.of(), ContractLinks.missing(classes, CONTRACT));
     }
