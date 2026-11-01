@@ -5,6 +5,23 @@ All notable changes to `botmaker-plugin-host`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
+## [Unreleased]
+
+No source changes since v0.10.0; re-released for updated upstream pins.
+
+No source changes since v0.9.0; re-released for updated upstream pins.
+
+### Changed (breaking)
+
+- **A plugin is named by its jar's pom** (2026-10-27). `PluginLoader` no longer uses `ServiceLoader`: it reads
+  each entry's poms (`PluginPoms`, new) and constructs the class the one pom setting `botmaker.plugin` names. An
+  entry whose poms name two plugins, a second entry with the same coordinate, and a class that is not the entry's
+  own `public final` direct `DeclaredPlugin` subclass are refused, each a `PluginFailure`.
+- **`PluginLoader.plugins()` answers `LoadedPlugin`s** (coordinate, name, jar, instance); `PluginCoordinate` is a
+  plugin's id. Nothing is printed to stderr: every failure is in `Loaded.failures()`.
+- `ContractLinks.declaresPlugin` is gone for `PluginPoms.declaresPlugin`.
+- `maven-model` 3.10.0 is a dependency, the pom parser Studio and the CLI use.
+
 ## [0.10.0] — 2026-11-01
 
 No source changes since v0.9.0; re-released for updated upstream pins.
