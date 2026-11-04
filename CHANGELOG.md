@@ -7,6 +7,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- A value's time (2026-11-04): `ParamValues.withReturned(…, Instant)` writes `@Param.Kept`, `ParamsFitter.fit` and
+  `withValue` carry it with the body, a time alone never makes a fit, and `ParamsFitter.withStartingValue` takes the
+  body without it, for a starting copy.
+
 ### Changed
 
 - **`ParamsFitter` works on JDT trees** (2026-11-04): it compares units with `ASTMatcher` and writes through `ASTRewrite`

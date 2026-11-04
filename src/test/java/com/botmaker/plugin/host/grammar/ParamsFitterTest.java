@@ -107,6 +107,31 @@ class ParamsFitterTest {
         assertEquals(made, ParamsFitter.withValue(made, mine, "rest"), "written once, it is not written again");
     }
 
+    /** When a run wrote a value belongs to the value: it follows the value, and never reaches a starting copy. */
+    @Test
+    void aValueKeepsItsTimeThroughAFit() {
+        String kept = "@Param.Kept(at = \"2026-11-04T10:00:00Z\")";
+        String mine = MINE.replace("public int tries()", kept + " public int tries()");
+
+        assertEquals(mine, ParamsFitter.fit(STARTING, mine), "a time is no reason to fit");
+
+        String reshaped = STARTING.replace("Attempts before giving up", "Attempts");
+        String fitted = flat(ParamsFitter.fit(reshaped, mine));
+        assertTrue(fitted.contains("\"Attempts\")"), fitted);
+        assertTrue(fitted.contains(kept) && fitted.contains("public int tries() { return 3; }"), fitted);
+
+        String retyped = flat(ParamsFitter.fit(STARTING.replace("int tries", "long tries"), mine));
+        assertFalse(retyped.contains("Kept"), "a reset value has no time: " + retyped);
+
+        assertFalse(ParamsFitter.withStartingValue(STARTING, mine, "tries").contains("Kept"), "never in a starting copy");
+        String again = mine.replace("10:00:00Z", "11:00:00Z");
+        String timed = ParamsFitter.withValue(mine, again, "tries");
+        assertTrue(timed.contains("11:00:00Z") && !timed.contains("10:00:00Z"), "the same value, its new time: " + timed);
+        String forgotten = flat(ParamsFitter.withValue(mine, STARTING, "tries"));
+        assertFalse(forgotten.contains("Kept"), "set back to its starting value: " + forgotten);
+        assertTrue(forgotten.contains("public int tries() { return 10; }"), forgotten);
+    }
+
     @Test
     void aMissingParameterIsAddedWithItsStartingValue(@TempDir Path bot) throws IOException {
         Path params = bot.resolve("src/main/java/com/refbot/params");

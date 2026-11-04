@@ -2,6 +2,7 @@ package com.botmaker.plugin.host.grammar;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -63,6 +64,28 @@ class ParamValuesTest {
     void aDuringARunValueTheRunLeftAloneStaysAsThePersonEditedIt() {
         String held = GROUP.replace("return 1;", "return 4;");
         assertEquals(held, ParamValues.withRunsValues(held, GROUP, GROUP));
+    }
+
+    /** A value a run wrote carries when it did; a person's edit, written without a time, changes none. */
+    @Test
+    void aRunsValueCarriesItsTime() {
+        Instant first = Instant.parse("2026-11-04T10:00:00Z");
+        Instant second = Instant.parse("2026-11-04T11:00:00Z");
+
+        String read = ParamValues.withReturned(GROUP, "Progress", "level", value("7"), first).orElseThrow();
+        assertTrue(read.contains("@Param.Kept(at = \"2026-11-04T10:00:00Z\")"), read);
+        assertTrue(read.contains("return 7;"), read);
+
+        String again = ParamValues.withReturned(read, "Progress", "level", value("7"), second).orElseThrow();
+        assertTrue(again.contains("\"2026-11-04T11:00:00Z\""), again);
+        assertFalse(again.contains("10:00:00Z"), "one time, the latest: " + again);
+
+        assertTrue(ParamValues.withReturned(read, "Progress", "level", value("8")).orElseThrow().contains("10:00:00Z"),
+                "a write without a time leaves the one there");
+
+        assertTrue(ParamValues.withRunsValues(GROUP, GROUP, read).contains("10:00:00Z"), "the run's merge carries it");
+        assertTrue(ParamValues.withRunsValues(read, read, again).contains("11:00:00Z"),
+                "the same value read again is a change: its new time");
     }
 
     @Test

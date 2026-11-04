@@ -11,6 +11,7 @@ import org.eclipse.jdt.core.dom.MemberValuePair;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.NormalAnnotation;
 import org.eclipse.jdt.core.dom.ReturnStatement;
+import org.eclipse.jdt.core.dom.StringLiteral;
 import org.eclipse.jdt.core.dom.TypeDeclaration;
 import org.eclipse.jdt.core.dom.rewrite.ASTRewrite;
 import org.eclipse.jdt.core.dom.rewrite.ListRewrite;
@@ -19,6 +20,7 @@ import org.eclipse.jface.text.Document;
 import org.eclipse.text.edits.MalformedTreeException;
 import org.eclipse.text.edits.TextEdit;
 
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -38,13 +40,25 @@ public final class ParamValues {
      * method's body is not one {@code return}.
      */
     public static Optional<String> withReturned(String source, String group, String method, JavaValue value) {
+        return written(source, group, method, value, null);
+    }
+
+    /** The same for a value a run wrote at {@code at}: the method carries that time, {@code @Param.Kept}. */
+    public static Optional<String> withReturned(String source, String group, String method, JavaValue value,
+                                                Instant at) {
+        return written(source, group, method, value, at);
+    }
+
+    private static Optional<String> written(String source, String group, String method, JavaValue value, Instant at) {
         CompilationUnit unit = SourceParser.parse(source);
         if (value == null || SourceParser.hasSyntaxErrors(unit)) return Optional.empty();
-        Optional<Expression> returned = returned(unit, group, method);
+        Optional<MethodDeclaration> declared = declared(unit, group, method);
+        Optional<Expression> returned = declared.flatMap(ParamValues::returned);
         if (returned.isEmpty()) return Optional.empty();
         AST ast = unit.getAST();
         ASTRewrite rewrite = ASTRewrite.create(ast);
         rewrite.replace(returned.get(), value.copyInto(ast), null);
+        if (at != null) writeTime(declared.get(), at, rewrite);
         addImports(unit, rewrite, value.imports());
         Document document = new Document(source);
         try {
@@ -92,19 +106,52 @@ public final class ParamValues {
         return false;
     }
 
-    /** What the one {@code return} of {@code group}'s parameter {@code method} returns. */
-    private static Optional<Expression> returned(CompilationUnit unit, String group, String method) {
+    /** {@code group}'s parameter {@code method}. */
+    private static Optional<MethodDeclaration> declared(CompilationUnit unit, String group, String method) {
         for (Object each : unit.types()) {
             if (!(each instanceof TypeDeclaration type) || !type.getName().getIdentifier().equals(group)) continue;
             for (MethodDeclaration declared : type.getMethods()) {
-                if (!declared.getName().getIdentifier().equals(method) || !declared.parameters().isEmpty()) continue;
-                Block body = declared.getBody();
-                if (body == null || body.statements().size() != 1) return Optional.empty();
-                return body.statements().getFirst() instanceof ReturnStatement ret
-                        ? Optional.ofNullable(ret.getExpression()) : Optional.empty();
+                if (declared.getName().getIdentifier().equals(method) && declared.parameters().isEmpty()) {
+                    return Optional.of(declared);
+                }
             }
         }
         return Optional.empty();
+    }
+
+    /** What the one {@code return} of {@code method} returns. */
+    private static Optional<Expression> returned(MethodDeclaration method) {
+        Block body = method.getBody();
+        if (body == null || body.statements().size() != 1) return Optional.empty();
+        return body.statements().getFirst() instanceof ReturnStatement ret
+                ? Optional.ofNullable(ret.getExpression()) : Optional.empty();
+    }
+
+    /** {@code @Param.Kept(at = …)} on {@code method}, replacing the one there, spelling {@code Param} as its class does. */
+    private static void writeTime(MethodDeclaration method, Instant at, ASTRewrite rewrite) {
+        AST ast = method.getAST();
+        StringLiteral time = ast.newStringLiteral();
+        time.setLiteralValue(at.toString());
+        MemberValuePair pair = ast.newMemberValuePair();
+        pair.setName(ast.newSimpleName("at"));
+        pair.setValue(time);
+        NormalAnnotation kept = ast.newNormalAnnotation();
+        kept.setTypeName(ast.newName(paramSpelling((TypeDeclaration) method.getParent()) + ".Kept"));
+        kept.values().add(pair);
+        ListRewrite modifiers = rewrite.getListRewrite(method, MethodDeclaration.MODIFIERS2_PROPERTY);
+        Annotation there = ParamsFitter.keptOn(method);
+        if (there != null) modifiers.replace(there, kept, null);
+        else modifiers.insertFirst(kept, null);
+    }
+
+    private static String paramSpelling(TypeDeclaration group) {
+        for (Object modifier : group.modifiers()) {
+            if (modifier instanceof Annotation annotation) {
+                String name = annotation.getTypeName().getFullyQualifiedName();
+                if (name.equals("Param") || name.endsWith(".Param")) return name;
+            }
+        }
+        return "Param";
     }
 
     private static void addImports(CompilationUnit unit, ASTRewrite rewrite, List<String> imports) {

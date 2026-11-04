@@ -1,5 +1,6 @@
 package com.botmaker.plugin.host.grammar;
 
+import com.botmaker.plugin.api.params.Param;
 import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTMatcher;
 import org.eclipse.jdt.core.dom.ASTNode;
@@ -50,7 +51,8 @@ import java.util.stream.Stream;
  * method whose body is this computer's value. {@code starting-params/} mirrors it file for file with the author's
  * starting values. Fitting makes each private file the starting file with this computer's bodies: a parameter the
  * starting copy lacks is dropped, one whose type changed is reset to its starting value, one the starting copy adds is
- * added with its starting value, and everything but the bodies (annotations, helpers) is the starting copy's. A file
+ * added with its starting value, and everything but the values (annotations, helpers) is the starting copy's: a
+ * value is its body and the {@code @Param.Kept} a run wrote beside it. A file
  * whose starting copy is gone is deleted; a starting file with no private copy is copied. Studio runs it on open and
  * before each compile.
  */
@@ -145,11 +147,22 @@ public final class ParamsFitter {
     }
 
     /**
-     * {@code starting} with the body of its parameter {@code name} taken from {@code params}, and the imports that
-     * body needs: what <i>Make this the starting value</i> writes. Unchanged when either side lacks the parameter,
-     * their types differ, or a source does not parse.
+     * {@code starting} with the value of its parameter {@code name} taken from {@code params}: the body, the imports
+     * that body needs and the time a run wrote it ({@code @Param.Kept}), or no time when {@code params} has none.
+     * Unchanged when either side lacks the parameter, their types differ, or a source does not parse.
      */
     public static String withValue(String starting, String params, String name) {
+        return taken(starting, params, name, true);
+    }
+
+    /**
+     * The same without the time, which never reaches a starting copy: what <i>Make this the starting value</i> writes.
+     */
+    public static String withStartingValue(String starting, String params, String name) {
+        return taken(starting, params, name, false);
+    }
+
+    private static String taken(String starting, String params, String name, boolean withTime) {
         CompilationUnit startUnit = SourceParser.parse(starting);
         CompilationUnit mineUnit = SourceParser.parse(params);
         if (SourceParser.hasSyntaxErrors(startUnit) || SourceParser.hasSyntaxErrors(mineUnit)) return starting;
@@ -160,8 +173,26 @@ public final class ParamsFitter {
             return starting;
         }
         Block body = mine.getBody();
-        if (start.getBody().subtreeMatch(new ASTMatcher(), body)) return starting;
-        return withBodies(starting, startUnit, Map.of(start, body), missingImports(startUnit, mineUnit, namesIn(body)));
+        if (start.getBody().subtreeMatch(new ASTMatcher(), body) && (!withTime || sameTime(start, mine))) return starting;
+        return withValues(starting, startUnit, Map.of(start, mine), withTime,
+                missingImports(startUnit, mineUnit, namesIn(body)));
+    }
+
+    /** The {@code @Param.Kept} on {@code method}, or null. */
+    static Annotation keptOn(MethodDeclaration method) {
+        for (Object modifier : method.modifiers()) {
+            if (modifier instanceof Annotation annotation) {
+                String name = annotation.getTypeName().getFullyQualifiedName();
+                if (name.equals(Param.Kept.class.getSimpleName()) || name.endsWith("Param.Kept")) return annotation;
+            }
+        }
+        return null;
+    }
+
+    private static boolean sameTime(MethodDeclaration one, MethodDeclaration other) {
+        Annotation mine = keptOn(one);
+        Annotation theirs = keptOn(other);
+        return mine == null ? theirs == null : mine.subtreeMatch(new ASTMatcher(), theirs);
     }
 
     /** Whether {@code unit} declares a top-level class marked {@code @Param}: a parameter group. */
@@ -190,9 +221,9 @@ public final class ParamsFitter {
         CompilationUnit mineUnit = SourceParser.parse(params);
         Map<String, MethodDeclaration> startMethods = parameters(startUnit);
         Map<String, MethodDeclaration> mineMethods = parameters(mineUnit);
-        if (sameFrame(startUnit, mineUnit, startMethods, mineMethods)) return new Fit(params, List.of());
+        if (sameFrame(starting, params)) return new Fit(params, List.of());
         List<String> changes = new ArrayList<>();
-        Map<MethodDeclaration, Block> kept = new LinkedHashMap<>();
+        Map<MethodDeclaration, MethodDeclaration> kept = new LinkedHashMap<>();
         Set<String> usedByKept = new HashSet<>();
         Set<String> dropped = new HashSet<>(mineMethods.keySet());
         dropped.removeAll(startMethods.keySet());
@@ -204,7 +235,7 @@ public final class ParamsFitter {
                     || namesIn(mine.getBody()).stream().anyMatch(dropped::contains)) {
                 changes.add("reset " + name + "()");
             } else {
-                kept.put(start, mine.getBody());
+                kept.put(start, mine);
                 usedByKept.addAll(namesIn(mine.getBody()));
             }
         });
@@ -212,27 +243,34 @@ public final class ParamsFitter {
                 .forEach(name -> changes.add("dropped " + name + "()"));
         if (changes.isEmpty()) changes.add("matched its starting copy");
         try {
-            return new Fit(withBodies(starting, startUnit, kept, missingImports(startUnit, mineUnit, usedByKept)), changes);
+            return new Fit(withValues(starting, startUnit, kept, true, missingImports(startUnit, mineUnit, usedByKept)),
+                    changes);
         } catch (IllegalStateException unwritable) {
             return new Fit(params, List.of("could not be fitted: " + unwritable.getMessage()));
         }
     }
 
     /**
-     * {@code source}, the text of {@code unit}, with each of {@code bodies}' methods given that body, copied as a tree
-     * from the other file, and {@code imports} added. A body already written alike keeps its text; a copied one is laid
-     * out by the rewrite, so a comment inside it does not follow.
+     * {@code source}, the text of {@code unit}, with each of {@code values}' methods given the body of the method of
+     * the other file it maps to, copied as a tree, its time too when {@code withTime}, and {@code imports} added. A
+     * body already written alike keeps its text; a copied one is laid out by the rewrite, so a comment inside it does
+     * not follow.
      *
      * @throws IllegalStateException when the rewrite cannot be applied: never read as "nothing changed", which would
      *         lose a value in silence
      */
-    private static String withBodies(String source, CompilationUnit unit,
-                                     Map<MethodDeclaration, Block> bodies, List<ImportDeclaration> imports) {
+    private static String withValues(String source, CompilationUnit unit, Map<MethodDeclaration, MethodDeclaration> values,
+                                     boolean withTime, List<ImportDeclaration> imports) {
         AST ast = unit.getAST();
         ASTRewrite rewrite = ASTRewrite.create(ast);
-        bodies.forEach((method, body) -> {
-            if (!method.getBody().subtreeMatch(new ASTMatcher(), body)) {
-                rewrite.replace(method.getBody(), ASTNode.copySubtree(ast, body), null);
+        values.forEach((method, from) -> {
+            if (!method.getBody().subtreeMatch(new ASTMatcher(), from.getBody())) {
+                rewrite.replace(method.getBody(), ASTNode.copySubtree(ast, from.getBody()), null);
+            }
+            if (withTime && !sameTime(method, from)) {
+                ListRewrite modifiers = rewrite.getListRewrite(method, MethodDeclaration.MODIFIERS2_PROPERTY);
+                if (keptOn(method) != null) modifiers.remove(keptOn(method), null);
+                if (keptOn(from) != null) modifiers.insertFirst(ASTNode.copySubtree(ast, keptOn(from)), null);
             }
         });
         ListRewrite list = rewrite.getListRewrite(unit, CompilationUnit.IMPORTS_PROPERTY);
@@ -247,12 +285,14 @@ public final class ParamsFitter {
     }
 
     /**
-     * Whether the two units differ only in their imports and their parameters' bodies, compared as trees: their values
-     * are all that differs. A comment outside a doc comment is not in the tree, so it never makes a fit.
+     * Whether the two sources differ only in their imports and their parameters' values (body and time), compared as
+     * trees. A comment outside a doc comment is not in the tree, so it never makes a fit.
      */
-    private static boolean sameFrame(CompilationUnit starting, CompilationUnit params,
-                                     Map<String, MethodDeclaration> startMethods,
-                                     Map<String, MethodDeclaration> mineMethods) {
+    private static boolean sameFrame(String startingSource, String paramsSource) {
+        CompilationUnit starting = withoutTimes(startingSource);
+        CompilationUnit params = withoutTimes(paramsSource);
+        Map<String, MethodDeclaration> startMethods = parameters(starting);
+        Map<String, MethodDeclaration> mineMethods = parameters(params);
         Set<Block> values = new HashSet<>();
         startMethods.values().forEach(method -> values.add(method.getBody()));
         mineMethods.values().forEach(method -> values.add(method.getBody()));
@@ -265,6 +305,13 @@ public final class ParamsFitter {
         };
         return frames.safeSubtreeMatch(starting.getPackage(), params.getPackage())
                 && frames.safeSubtreeListMatch(starting.types(), params.types());
+    }
+
+    /** A tree of {@code source} for comparing only, each {@code @Param.Kept} taken off. */
+    private static CompilationUnit withoutTimes(String source) {
+        CompilationUnit unit = SourceParser.parse(source);
+        parameters(unit).values().forEach(method -> method.modifiers().remove(keptOn(method)));
+        return unit;
     }
 
     /** Each parameter of the unit's group, by name: a non-static, non-private, no-argument method with a body. */
