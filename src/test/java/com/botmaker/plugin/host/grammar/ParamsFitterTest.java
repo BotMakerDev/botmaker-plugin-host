@@ -72,7 +72,15 @@ class ParamsFitterTest {
         assertFalse(fitted.contains("import com.refbot.Mode;"), "no kept value uses it: " + fitted);
         assertEquals(MINE, ParamsFitter.fit(STARTING, MINE), "a fitting file is left alone");
 
-        String overMode = ParamsFitter.fit(starting, mine.replace("return \"main\";", "return mode().name();"));
+        String made = ParamsFitter.withValue(STARTING, MINE.replace("Duration.ofSeconds(5)", "Mode.REST"), "account");
+        assertTrue(made.contains("return \"main\";") && made.contains("return 10;"), "one value, no other: " + made);
+        assertFalse(made.contains("import com.refbot.Mode;"), "only what that value uses: " + made);
+        String rest = ParamsFitter.withValue(STARTING.replace("Duration rest", "Mode rest")
+                .replace("Duration.ofMinutes(1)", "Mode.FAST"), MINE.replace("Duration rest", "Mode rest")
+                .replace("Duration.ofSeconds(5)", "Mode.REST"), "rest");
+        assertTrue(rest.contains("return Mode.REST;") && rest.contains("import com.refbot.Mode;"), rest);
+
+        String overMode =ParamsFitter.fit(starting, mine.replace("return \"main\";", "return mode().name();"));
         assertTrue(overMode.contains("public String account() { return \"\"; }"),
                 "a value over a dropped parameter is reset, never left not compiling: " + overMode);
     }
@@ -84,7 +92,9 @@ class ParamsFitterTest {
         Path backups = bot.resolve(".botmaker/values-removed");
         String mine = MINE.replace("\n    public String account() { return \"main\"; }\n", "");
         write(params.resolve(FILE), mine);
-        write(params.resolve("sdk/Gone.java"), "package com.refbot.params.sdk;\npublic class Gone {}\n");
+        write(params.resolve("sdk/Gone.java"), "package com.refbot.params.sdk;\n@Param\npublic class Gone {}\n");
+        String fields = "package com.refbot.params;\npublic final class Parameters {\n    @Param public static int a = 1;\n}\n";
+        write(params.resolve("Parameters.java"), fields);
         write(starting.resolve(FILE), STARTING);
         write(starting.resolve("sdk/Sdk.java"), "package com.refbot.params.sdk;\npublic class Sdk {}\n");
 
@@ -96,6 +106,7 @@ class ParamsFitterTest {
         assertTrue(now.contains("public int tries() { return 3; }"), now);
         assertTrue(Files.exists(params.resolve("sdk/Sdk.java")), "a file the private copy lacks is copied");
         assertFalse(Files.exists(params.resolve("sdk/Gone.java")), "its starting copy is gone");
+        assertEquals(fields, Files.readString(params.resolve("Parameters.java")), "no @Param class: not a group");
         Path pass;
         try (var each = Files.list(backups)) {
             pass = each.findFirst().orElseThrow();

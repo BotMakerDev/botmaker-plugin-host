@@ -2,6 +2,7 @@ package com.botmaker.plugin.host.grammar;
 
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTVisitor;
+import org.eclipse.jdt.core.dom.Annotation;
 import org.eclipse.jdt.core.dom.ArrayType;
 import org.eclipse.jdt.core.dom.Block;
 import org.eclipse.jdt.core.dom.CompilationUnit;
@@ -124,7 +125,8 @@ public final class ParamsFitter {
             String mine = params.get(file);
             String start = starting.get(file);
             if (start == null) {
-                out.add(new Fitted(file, Optional.empty(), List.of("deleted")));
+                // A file with no @Param class is no group (a bot's Parameters.java of @Param fields): left alone.
+                if (isGroup(SourceParser.parse(mine))) out.add(new Fitted(file, Optional.empty(), List.of("deleted")));
             } else if (mine == null) {
                 out.add(new Fitted(file, Optional.of(start), List.of("added")));
             } else {
@@ -133,6 +135,46 @@ public final class ParamsFitter {
             }
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * {@code starting} with the body of its parameter {@code name} taken from {@code params}, and the imports that
+     * body needs: what <i>Make this the starting value</i> writes. Unchanged when either side lacks the parameter,
+     * their types differ, or a source does not parse.
+     */
+    public static String withValue(String starting, String params, String name) {
+        CompilationUnit startUnit = SourceParser.parse(starting);
+        CompilationUnit mineUnit = SourceParser.parse(params);
+        if (SourceParser.hasSyntaxErrors(startUnit) || SourceParser.hasSyntaxErrors(mineUnit)) return starting;
+        MethodDeclaration start = parameters(startUnit).get(name);
+        MethodDeclaration mine = parameters(mineUnit).get(name);
+        if (start == null || mine == null
+                || !shape(mine.getReturnType2()).equals(shape(start.getReturnType2()))) {
+            return starting;
+        }
+        Block body = mine.getBody();
+        List<Splice> splices = new ArrayList<>(List.of(new Splice(start.getBody().getStartPosition(),
+                end(start.getBody()), params.substring(body.getStartPosition(), end(body)))));
+        String missing = missingImports(startUnit, mineUnit, namesIn(body));
+        if (!missing.isEmpty()) splices.add(new Splice(importsAt(startUnit), importsAt(startUnit), missing));
+        splices.sort(Comparator.comparingInt(Splice::start).reversed());
+        StringBuilder out = new StringBuilder(starting);
+        for (Splice each : splices) out.replace(each.start(), each.end(), each.text());
+        return out.toString();
+    }
+
+    /** Whether {@code unit} declares a top-level class marked {@code @Param}: a parameter group. */
+    public static boolean isGroup(CompilationUnit unit) {
+        for (Object each : unit.types()) {
+            if (!(each instanceof TypeDeclaration type) || type.isInterface()) continue;
+            for (Object modifier : type.modifiers()) {
+                if (modifier instanceof Annotation annotation) {
+                    String name = annotation.getTypeName().getFullyQualifiedName();
+                    if (name.equals("Param") || name.endsWith(".Param")) return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** {@code params} fitted to {@code starting}: the text unchanged when it fits. */
