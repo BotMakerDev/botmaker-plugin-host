@@ -51,8 +51,12 @@ copies.
 
 ## The one rule
 
-**Nothing in this module may name a type outside `com.botmaker.plugin.api` and the JDK** — with one exception,
-`maven-model` inside `PluginPoms` (2026-10-27, the user's call: the parser Studio and the CLI already read poms
+**Nothing in this module may name a type outside `com.botmaker.plugin.api` and the JDK** — with two exceptions.
+JDT (`org.eclipse.jdt.core`, and the `org.eclipse.jface.text`/`org.eclipse.text` it brings) inside `grammar`, the
+value grammar moved here from Studio on 2026-11-04 (the user's call, umbrella plan `2026-11-04-private-values.md`):
+every host — Studio, the CLI, a bot writing its own values — reads and writes a value the same way. JDT is
+`optional`, so reason 1 below still holds: a host that only loads plugins downloads none of it, and a host that
+uses `grammar` declares JDT itself at the same version. And `maven-model` inside `PluginPoms` (2026-10-27, the user's call: the parser Studio and the CLI already read poms
 with; no natives, and none of its types leaves `PluginPoms`). Not the SDK, not Studio, not JavaFX, not
 `botmaker-shared`. Two reasons, and the second is the operational one:
 
@@ -86,6 +90,7 @@ one thing that can make that false. So this module refuses to supply one, and a 
 
 ```bash
 mvn test        # PluginLoaderTest, PluginPomsTest, PalettesTest, ContractLinksTest; a fixture that fails to compile fails the test
+                # grammar/: ValueGrammarTest, ChainValuesTest, FactoryTest, SourceNodeTest and the grammar's other tests
 mvn install     # com.github.BotMakerDev:botmaker-plugin-host at the pom's main -SNAPSHOT
 ```
 

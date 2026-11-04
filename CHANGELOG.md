@@ -5,6 +5,15 @@ All notable changes to `botmaker-plugin-host`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
+## [Unreleased]
+
+### Added
+
+- **The value grammar** (`com.botmaker.plugin.host.grammar`, 2026-11-04): `ValueGrammar`, its reader and writer,
+  `SourceParser` and `SourceFormatter`, moved unchanged from Studio's `plugin/grammar` and `parser/helpers` so every
+  host reads and writes a bot's values the same way. This module now depends on JDT (`org.eclipse.jdt.core`
+  3.47.0, Studio's pin). Once the SDK depends on it too (private-values plan, phase 4), a host release forces sdk.
+
 ## [0.10.1] — 2026-11-01
 
 No source changes since v0.10.0; re-released for updated upstream pins.

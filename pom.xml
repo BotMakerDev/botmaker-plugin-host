@@ -17,7 +17,8 @@
     <name>BotMaker Plugin Host</name>
     <description>
         Loading a BotMaker Studio plugin out of one project's own resolved jars: the inverted-delegation
-        classloader and the ServiceLoader pass, so every host loads a plugin the same way Studio does.
+        classloader and the pom pass, so every host loads a plugin the same way Studio does; and the value
+        grammar (JDT), so every host reads and writes a bot's values the same way.
     </description>
 
     <!--
@@ -74,6 +75,21 @@
             <groupId>org.apache.maven</groupId>
             <artifactId>maven-model</artifactId>
             <version>3.10.0</version>
+        </dependency>
+
+        <!--
+          The value grammar (`grammar`, moved from Studio 2026-11-04): it reads a plugin's values off JDT trees
+          and writes JDT trees, and SourceFormatter formats with JDT's formatter (its jface Document comes with
+          org.eclipse.text, a JDT dependency). Every host writes a bot's values the same way: Studio, the CLI
+          and, from the private-values plan's phase 4, the SDK's runtime. Studio's pin. Optional, like the CLI's:
+          a host that only loads plugins (the catalog's CI resolving the CLI) downloads none of it; a host that
+          uses `grammar` declares JDT itself, at this version.
+        -->
+        <dependency>
+            <groupId>org.eclipse.jdt</groupId>
+            <artifactId>org.eclipse.jdt.core</artifactId>
+            <version>3.47.0</version>
+            <optional>true</optional>
         </dependency>
 
         <dependency>
