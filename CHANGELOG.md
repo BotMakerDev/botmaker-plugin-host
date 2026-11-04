@@ -16,7 +16,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **`ValuesPruner`** (2026-11-04): fits a bot's values classes (`values/<Schema>Values.java`) to their `@Param`
   schemas — an override the schema no longer declares, or declares with another type, is dropped with the imports
   nothing uses then, and a class whose schema is gone is deleted. `prune(schema, values)` on two texts, `over` on a
-  bot's sources, `onDisk` on its source folder.
+  bot's sources, `onDisk` on its source folder. Deprecated for removal at once by `ParamsFitter`.
+- **`ParamsFitter`** (2026-11-04): fits a bot's private `params/` files to their copies in `starting-params/` — each
+  file becomes its starting copy with this computer's method bodies: a parameter the starting copy lacks is dropped,
+  one retyped is reset to its starting value, one added is added, a file whose starting copy is gone is deleted and
+  one only the starting copy has is copied. Nothing is decided while a source does not parse or with no
+  `starting-params/` folder; each file changed is backed up at its relative path. `fit(starting, params)` on two
+  texts, `over` on two maps, `onDisk(paramsRoot, startingRoot, backups)` on disk.
 
 ### Fixed
 

@@ -43,7 +43,11 @@ import java.util.stream.Stream;
  * {@code values} package, implementing it. A values class keeps only the methods its schema declares with the same
  * return type: a method the schema lacks or retyped is dropped, with the imports nothing uses afterwards, and a
  * class whose schema is gone is deleted. Every host runs it before a compile (Studio) and before a write (the bot).
+ *
+ * @deprecated a parameter is one thing now, fitted to its starting copy: {@link ParamsFitter}. Studio moves to it,
+ *     then this goes (umbrella plan {@code 2026-11-04-private-values.md}, phase 5).
  */
+@Deprecated(forRemoval = true)
 public final class ValuesPruner {
 
     /** The package segment a values class sits in. */
