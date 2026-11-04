@@ -118,8 +118,9 @@ final class ValueWriter {
         }
         if (type.isEnum()) return constant(type, value, names);
         if (isHostContainer(type)) return any(value, names);
-        if (value instanceof String source) {
-            // A type declared with no component crosses as the Java it is written as: the SDK's CaptureSource.
+        if (value instanceof String source && !type.isInstance(source)) {
+            // A type declared with no component crosses as the Java it is written as: the SDK's CaptureSource. A type
+            // a String is itself, Object or CharSequence, holds text: never read that as Java (2026-11-04).
             return SourceNode.parse(source).map(node -> JavaValue.kept(node).copyInto(names.ast));
         }
         return type.isInstance(value) ? any(value, names) : Optional.empty();

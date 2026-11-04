@@ -7,6 +7,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- **Text under `Object` or `CharSequence` is written as a literal** (2026-11-04): `ValueWriter` read such a `String` as
+  Java source, so text a run held could reach the bot's next compile as code.
+
 ### Added
 
 - **`ParamValues` and `ClasspathGrammar`** (2026-11-04): one parameter's value written into its group's source, a

@@ -236,6 +236,13 @@ class ValueGrammarTest {
         assertTrue(GRAMMAR.known(source));
     }
 
+    /** Text under a type a String is, a run's value read off a game, is a string literal and never Java. */
+    @Test
+    void textUnderAnObjectIsALiteralAndNeverJava() {
+        assertEquals(Optional.of("\"System.exit(0)\""), src(GRAMMAR.initializer(Object.class, "System.exit(0)")));
+        assertEquals(Optional.of("\"System.exit(0)\""), src(GRAMMAR.initializer(CharSequence.class, "System.exit(0)")));
+    }
+
     /** A fresh call of the wrong shape is never written: it would not compile in the bot's file. */
     @Test
     void aFreshCallOfTheWrongShapeWritesNothing() {
