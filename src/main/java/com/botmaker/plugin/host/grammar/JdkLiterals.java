@@ -246,14 +246,13 @@ public final class JdkLiterals {
     /**
      * {@code value} as a text block holding exactly it: each line indented as much as the closing quotes (stripped
      * again by Java), the last ended by a {@code \} so no line break is added, a trailing space kept as {@code \s},
-     * and backslashes and {@code """} escaped.
+     * and backslashes and every third quote of a run escaped, so no run of quotes closes the block.
      */
     static TextBlock textBlock(AST ast, String value) {
         StringBuilder out = new StringBuilder("\"\"\"\n");
         String[] lines = value.split("\n", -1);
         for (int i = 0; i < lines.length; i++) {
-            String line = lines[i].replace("\\", "\\\\").replace("\"\"\"", "\\\"\"\"").replace("\r", "\\r")
-                    .replace("\t", "\\t");
+            String line = quotesEscaped(lines[i].replace("\\", "\\\\")).replace("\r", "\\r").replace("\t", "\\t");
             if (line.endsWith(" ")) line = line.substring(0, line.length() - 1) + "\\s";
             boolean last = i == lines.length - 1;
             // An empty line counts for no indentation, but the last carries its \: it is indented too.
@@ -264,6 +263,24 @@ public final class JdkLiterals {
         TextBlock block = ast.newTextBlock();
         block.setEscapedValue(out.toString());
         return block;
+    }
+
+    /**
+     * {@code line} with the third quote of every run written {@code \"}: three unescaped quotes in a row would close
+     * the text block, and escaping only a whole {@code """} leaves a fourth quote to close it.
+     */
+    private static String quotesEscaped(String line) {
+        StringBuilder out = new StringBuilder(line.length());
+        int run = 0;
+        for (char c : line.toCharArray()) {
+            run = c == '"' ? run + 1 : 0;
+            if (run == 3) {
+                out.append('\\');
+                run = 0;
+            }
+            out.append(c);
+        }
+        return out.toString();
     }
 
     /**

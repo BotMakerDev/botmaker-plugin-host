@@ -14,6 +14,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   host reads and writes a bot's values the same way. This module now depends on JDT (`org.eclipse.jdt.core`
   3.47.0, Studio's pin). Once the SDK depends on it too (private-values plan, phase 4), a host release forces sdk.
 
+### Fixed
+
+- **A string with four or more quotes in a row is written as a text block that still parses** (2026-11-04): the
+  third quote of every run is escaped, not only a whole `"""`, which left a fourth quote to close the block.
+
 ## [0.10.1] — 2026-11-01
 
 No source changes since v0.10.0; re-released for updated upstream pins.
