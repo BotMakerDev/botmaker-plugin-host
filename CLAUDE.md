@@ -41,7 +41,8 @@ by who depends on which:
 | `botmaker-plugin-host` | the **host** | `compile` | the host's |
 
 So: `botmaker-studio` depends on this and must never depend on the toolkit; a plugin depends on the toolkit
-and never on this.
+and never on this. One exception, the SDK (2026-11-04): a running bot writes its own during-a-run values through
+`grammar` and `ClasspathGrammar`, so the SDK declares this and JDT at `compile`, for the bot's JVM.
 
 It was extracted from `botmaker-studio` on 2026-08-28 (plugin-ecosystem plan, phase 5) as a **pure move** —
 not a line of behaviour changed. The reason for the move is that Studio stopped being the only host: the

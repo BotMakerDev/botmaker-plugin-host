@@ -244,7 +244,7 @@ public final class ParamsFitter {
     }
 
     /** Each parameter of the unit's group, by name: a non-static, non-private, no-argument method with a body. */
-    private static Map<String, MethodDeclaration> parameters(CompilationUnit unit) {
+    static Map<String, MethodDeclaration> parameters(CompilationUnit unit) {
         Map<String, MethodDeclaration> out = new LinkedHashMap<>();
         for (Object each : unit.types()) {
             if (!(each instanceof TypeDeclaration type) || type.isInterface()) continue;

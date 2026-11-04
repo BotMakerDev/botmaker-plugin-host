@@ -9,6 +9,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- **`ParamValues` and `ClasspathGrammar`** (2026-11-04): one parameter's value written into its group's source, a
+  during-a-run value taken from disk into a host's copy, and the grammar of a process on its plugins' own classpath,
+  for a running bot.
 - **The value grammar** (`com.botmaker.plugin.host.grammar`, 2026-11-04): `ValueGrammar`, its reader and writer,
   `SourceParser` and `SourceFormatter`, moved unchanged from Studio's `plugin/grammar` and `parser/helpers` so every
   host reads and writes a bot's values the same way. This module now depends on JDT (`org.eclipse.jdt.core`
