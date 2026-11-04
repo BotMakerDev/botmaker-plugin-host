@@ -13,6 +13,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   `SourceParser` and `SourceFormatter`, moved unchanged from Studio's `plugin/grammar` and `parser/helpers` so every
   host reads and writes a bot's values the same way. This module now depends on JDT (`org.eclipse.jdt.core`
   3.47.0, Studio's pin). Once the SDK depends on it too (private-values plan, phase 4), a host release forces sdk.
+- **`ValuesPruner`** (2026-11-04): fits a bot's values classes (`values/<Schema>Values.java`) to their `@Param`
+  schemas — an override the schema no longer declares, or declares with another type, is dropped with the imports
+  nothing uses then, and a class whose schema is gone is deleted. `prune(schema, values)` on two texts, `over` on a
+  bot's sources, `onDisk` on its source folder.
 
 ### Fixed
 
