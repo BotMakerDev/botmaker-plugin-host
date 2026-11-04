@@ -42,7 +42,8 @@ by who depends on which:
 
 So: `botmaker-studio` depends on this and must never depend on the toolkit; a plugin depends on the toolkit
 and never on this. One exception, the SDK (2026-11-04): a running bot writes its own during-a-run values through
-`grammar` and `ClasspathGrammar`, so the SDK declares this and JDT at `compile`, for the bot's JVM.
+`botmaker-java`'s grammar and `ClasspathGrammar`, so the SDK declares this and `botmaker-java` at `compile`, for the
+bot's JVM.
 
 It was extracted from `botmaker-studio` on 2026-08-28 (plugin-ecosystem plan, phase 5) as a **pure move** —
 not a line of behaviour changed. The reason for the move is that Studio stopped being the only host: the
@@ -53,11 +54,10 @@ copies.
 ## The one rule
 
 **Nothing in this module may name a type outside `com.botmaker.plugin.api` and the JDK** — with two exceptions.
-JDT (`org.eclipse.jdt.core`, and the `org.eclipse.jface.text`/`org.eclipse.text` it brings) inside `grammar`, the
-value grammar moved here from Studio on 2026-11-04 (the user's call, umbrella plan `2026-11-04-private-values.md`):
-every host — Studio, the CLI, a bot writing its own values — reads and writes a value the same way. JDT is
-`optional`, so reason 1 below still holds: a host that only loads plugins downloads none of it, and a host that
-uses `grammar` declares JDT itself at the same version. And `maven-model` inside `PluginPoms` (2026-10-27, the user's call: the parser Studio and the CLI already read poms
+`com.botmaker.java.grammar` inside `ClasspathGrammar`, which builds the value grammar from a classpath's plugin poms.
+The grammar itself moved to `botmaker-java` on 2026-11-04 (umbrella plan `2026-11-04-java-and-core.md`); that module is
+`optional` here, so reason 1 below still holds: a host that only loads plugins downloads no JDT, and a host that
+calls `ClasspathGrammar` declares `botmaker-java` itself. And `maven-model` inside `PluginPoms` (2026-10-27, the user's call: the parser Studio and the CLI already read poms
 with; no natives, and none of its types leaves `PluginPoms`). Not the SDK, not Studio, not JavaFX, not
 `botmaker-shared`. Two reasons, and the second is the operational one:
 
@@ -91,7 +91,6 @@ one thing that can make that false. So this module refuses to supply one, and a 
 
 ```bash
 mvn test        # PluginLoaderTest, PluginPomsTest, PalettesTest, ContractLinksTest; a fixture that fails to compile fails the test
-                # grammar/: ValueGrammarTest, ChainValuesTest, FactoryTest, SourceNodeTest and the grammar's other tests
 mvn install     # com.github.BotMakerDev:botmaker-plugin-host at the pom's main -SNAPSHOT
 ```
 

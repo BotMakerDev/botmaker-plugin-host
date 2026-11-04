@@ -3,7 +3,7 @@ package com.botmaker.plugin.host;
 import com.botmaker.plugin.api.StudioPlugin;
 import com.botmaker.plugin.api.value.ComponentType;
 import com.botmaker.plugin.api.value.PluginType;
-import com.botmaker.plugin.host.grammar.ValueGrammar;
+import com.botmaker.java.grammar.ValueGrammar;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

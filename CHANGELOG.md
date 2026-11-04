@@ -7,6 +7,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed (botmaker-java)
+
+- The value grammar and `SourceParser` left for `botmaker-java` (2026-11-04): `com.botmaker.plugin.host.grammar` is now
+  `com.botmaker.java.grammar`. `ClasspathGrammar` stays here and needs `botmaker-java`, an `optional` dependency in place
+  of JDT: a host that calls it declares that module itself.
+
 ### Changed (one parser)
 
 - `SourceParser` is the one entry from text to a tree (2026-11-04): a unit (`parse`), an expression, a type, a block of

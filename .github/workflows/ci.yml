@@ -33,6 +33,14 @@ jobs:
           repository: BotMakerDev/botmaker-studio-api
           path: .deps/botmaker-studio-api
 
+      # `ClasspathGrammar` builds the value grammar this library holds. `optional` in the pom, for the same
+      # reason as the contract's `provided`: resolved from source at its main -SNAPSHOT.
+      - name: Check out botmaker-java
+        uses: actions/checkout@v7
+        with:
+          repository: BotMakerDev/botmaker-java
+          path: .deps/botmaker-java
+
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -44,6 +52,7 @@ jobs:
         run: |
           source .github/mvn-retry.sh
           mvn_retry mvn -B -f .deps/botmaker-studio-api/pom.xml install -DskipTests
+          mvn_retry mvn -B -f .deps/botmaker-java/pom.xml install -DskipTests
 
       - name: Build and test
         run: mvn -B verify

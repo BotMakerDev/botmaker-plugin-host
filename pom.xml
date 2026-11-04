@@ -17,8 +17,7 @@
     <name>BotMaker Plugin Host</name>
     <description>
         Loading a BotMaker Studio plugin out of one project's own resolved jars: the inverted-delegation
-        classloader and the pom pass, so every host loads a plugin the same way Studio does; and the value
-        grammar (JDT), so every host reads and writes a bot's values the same way.
+        classloader and the pom pass, so every host loads a plugin the same way Studio does.
     </description>
 
     <!--
@@ -41,6 +40,8 @@
         <junit.version>5.10.2</junit.version>
         <!-- studio-api's main version; a release commit sets the released one (doc 43). -->
         <botmaker.studioapi.version>0.14.2-SNAPSHOT</botmaker.studioapi.version>
+        <!-- botmaker-java's main version, on the same terms. -->
+        <botmaker.java.version>0.1.0-SNAPSHOT</botmaker.java.version>
     </properties>
 
     <repositories>
@@ -78,17 +79,14 @@
         </dependency>
 
         <!--
-          The value grammar (`grammar`, moved from Studio 2026-11-04): it reads a plugin's values off JDT trees
-          and writes JDT trees, and SourceFormatter formats with JDT's formatter (its jface Document comes with
-          org.eclipse.text, a JDT dependency). Every host writes a bot's values the same way: Studio, the CLI
-          and, from the private-values plan's phase 4, the SDK's runtime. Studio's pin. Optional, like the CLI's:
-          a host that only loads plugins (the catalog's CI resolving the CLI) downloads none of it; a host that
-          uses `grammar` declares JDT itself, at this version.
+          The value grammar, which ClasspathGrammar builds from a classpath's plugin poms; it left this module
+          for botmaker-java on 2026-11-04. Optional: a host that only loads plugins (the catalog's CI resolving
+          the CLI) downloads no JDT; a host that calls ClasspathGrammar declares botmaker-java itself.
         -->
         <dependency>
-            <groupId>org.eclipse.jdt</groupId>
-            <artifactId>org.eclipse.jdt.core</artifactId>
-            <version>3.47.0</version>
+            <groupId>com.github.BotMakerDev</groupId>
+            <artifactId>botmaker-java</artifactId>
+            <version>${botmaker.java.version}</version>
             <optional>true</optional>
         </dependency>
 
