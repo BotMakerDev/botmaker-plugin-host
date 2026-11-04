@@ -11,14 +11,19 @@ import org.eclipse.jdt.core.dom.Block;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.ImportDeclaration;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
+import org.eclipse.jdt.core.dom.MethodInvocation;
 import org.eclipse.jdt.core.dom.Modifier;
 import org.eclipse.jdt.core.dom.NameQualifiedType;
 import org.eclipse.jdt.core.dom.ParameterizedType;
 import org.eclipse.jdt.core.dom.QualifiedType;
+import org.eclipse.jdt.core.dom.ReturnStatement;
 import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.SimpleType;
+import org.eclipse.jdt.core.dom.SingleMemberAnnotation;
+import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
 import org.eclipse.jdt.core.dom.Type;
 import org.eclipse.jdt.core.dom.TypeDeclaration;
+import org.eclipse.jdt.core.dom.TypeLiteral;
 import org.eclipse.jdt.core.dom.rewrite.ASTRewrite;
 import org.eclipse.jdt.core.dom.rewrite.ListRewrite;
 import org.eclipse.jface.text.BadLocationException;
@@ -51,7 +56,8 @@ import java.util.stream.Stream;
  * method whose body is this computer's value. {@code starting-params/} mirrors it file for file with the author's
  * starting values. Fitting makes each private file the starting file with this computer's bodies: a parameter the
  * starting copy lacks is dropped, one whose type changed is reset to its starting value, one the starting copy adds is
- * added with its starting value, and everything but the values (annotations, helpers) is the starting copy's: a
+ * added with its starting value, one a rename rule of the starting copy names ({@link #renameTarget}) takes the value
+ * of its old name at the same type, and everything but the values (annotations, helpers) is the starting copy's: a
  * value is its body and the {@code @Param.Kept} a run wrote beside it. A file
  * whose starting copy is gone is deleted; a starting file with no private copy is copied. Studio runs it on open and
  * before each compile.
@@ -198,15 +204,94 @@ public final class ParamsFitter {
     /** Whether {@code unit} declares a top-level class marked {@code @Param}: a parameter group. */
     public static boolean isGroup(CompilationUnit unit) {
         for (Object each : unit.types()) {
-            if (!(each instanceof TypeDeclaration type) || type.isInterface()) continue;
-            for (Object modifier : type.modifiers()) {
-                if (modifier instanceof Annotation annotation) {
-                    String name = annotation.getTypeName().getFullyQualifiedName();
-                    if (name.equals("Param") || name.endsWith(".Param")) return true;
-                }
-            }
+            if (each instanceof TypeDeclaration type && isGroupType(type)) return true;
         }
         return false;
+    }
+
+    /**
+     * Each parameter of the starting copy that a rename rule in its group says was called something else, by its new
+     * name, to the old name {@code mine} still holds: a rule at the old type, whose old name the starting copy no longer
+     * has and whose new one {@code mine} does not have yet. The first rule in file order wins.
+     */
+    private static Map<String, String> renamed(CompilationUnit startUnit, Map<String, MethodDeclaration> startMethods,
+                                               Map<String, MethodDeclaration> mineMethods) {
+        Map<String, String> out = new LinkedHashMap<>();
+        Set<String> taken = new HashSet<>();
+        for (Object each : startUnit.types()) {
+            if (!(each instanceof TypeDeclaration type) || type.isInterface()) continue;
+            for (MethodDeclaration rule : type.getMethods()) {
+                Optional<String> to = renameTarget(rule);
+                if (to.isEmpty()) continue;
+                String from = rule.getName().getIdentifier();
+                MethodDeclaration mine = mineMethods.get(from);
+                MethodDeclaration start = startMethods.get(to.get());
+                if (mine == null || start == null || startMethods.containsKey(from)
+                        || mineMethods.containsKey(to.get()) || out.containsKey(to.get()) || !taken.add(from)) {
+                    continue;
+                }
+                String oldType = shape(rule.getReturnType2());
+                if (oldType.equals(shape(mine.getReturnType2())) && oldType.equals(shape(start.getReturnType2()))) {
+                    out.put(to.get(), from);
+                }
+            }
+            break;
+        }
+        return out;
+    }
+
+    /**
+     * The parameter a rename rule says {@code rule}'s name became (2026-11-04): {@code rule} is a static method of a
+     * {@code @Param} group marked {@code @Migrate(Group.class)}, taking only its {@code @Migrate.Self Group} receiver and
+     * returning that receiver's no-argument call of the new name, at the old type:
+     *
+     * <pre>{@code
+     * @Migrate(RunChoices.class)
+     * static int tries(@Migrate.Self RunChoices self) { return self.attempts(); }
+     * }</pre>
+     *
+     * A committed rule in the group's starting copy is how a renamed parameter keeps this computer's value on every
+     * copy of the bot. Empty for any other method.
+     */
+    public static Optional<String> renameTarget(MethodDeclaration rule) {
+        if (!(rule.getParent() instanceof TypeDeclaration group) || !isGroupType(group)
+                || !Modifier.isStatic(rule.getModifiers()) || rule.parameters().size() != 1 || rule.getBody() == null
+                || rule.getBody().statements().size() != 1) {
+            return Optional.empty();
+        }
+        String groupName = group.getName().getIdentifier();
+        Annotation mark = annotationOn(rule.modifiers(), "Migrate");
+        if (!(mark instanceof SingleMemberAnnotation single) || !(single.getValue() instanceof TypeLiteral owner)
+                || !last(owner.getType().toString()).equals(groupName)) {
+            return Optional.empty();
+        }
+        SingleVariableDeclaration self = (SingleVariableDeclaration) rule.parameters().getFirst();
+        if (annotationOn(self.modifiers(), "Self") == null || !last(self.getType().toString()).equals(groupName)
+                || self.getExtraDimensions() != 0 || self.isVarargs()) {
+            return Optional.empty();
+        }
+        if (rule.getBody().statements().getFirst() instanceof ReturnStatement returned
+                && returned.getExpression() instanceof MethodInvocation call && call.arguments().isEmpty()
+                && call.typeArguments().isEmpty() && call.getExpression() instanceof SimpleName receiver
+                && receiver.getIdentifier().equals(self.getName().getIdentifier())) {
+            return Optional.of(call.getName().getIdentifier());
+        }
+        return Optional.empty();
+    }
+
+    /** The annotation among {@code modifiers} whose name is {@code simple} or ends with it after a dot, or null. */
+    private static Annotation annotationOn(List<?> modifiers, String simple) {
+        for (Object modifier : modifiers) {
+            if (modifier instanceof Annotation annotation) {
+                String name = annotation.getTypeName().getFullyQualifiedName();
+                if (name.equals(simple) || name.endsWith("." + simple)) return annotation;
+            }
+        }
+        return null;
+    }
+
+    private static boolean isGroupType(TypeDeclaration type) {
+        return !type.isInterface() && annotationOn(type.modifiers(), "Param") != null;
     }
 
     /** {@code params} fitted to {@code starting}: the text unchanged when it fits. */
@@ -227,8 +312,12 @@ public final class ParamsFitter {
         Set<String> usedByKept = new HashSet<>();
         Set<String> dropped = new HashSet<>(mineMethods.keySet());
         dropped.removeAll(startMethods.keySet());
-        startMethods.forEach((name, start) -> {
-            MethodDeclaration mine = mineMethods.get(name);
+        Map<String, String> renamed = renamed(startUnit, startMethods, mineMethods);
+        for (Map.Entry<String, MethodDeclaration> each : startMethods.entrySet()) {
+            String name = each.getKey();
+            MethodDeclaration start = each.getValue();
+            String from = renamed.getOrDefault(name, name);
+            MethodDeclaration mine = mineMethods.get(from);
             if (mine == null) {
                 changes.add("added " + name + "()");
             } else if (!shape(mine.getReturnType2()).equals(shape(start.getReturnType2()))
@@ -237,9 +326,10 @@ public final class ParamsFitter {
             } else {
                 kept.put(start, mine);
                 usedByKept.addAll(namesIn(mine.getBody()));
+                if (!from.equals(name)) changes.add("renamed " + from + "() to " + name + "()");
             }
-        });
-        mineMethods.keySet().stream().filter(name -> !startMethods.containsKey(name))
+        }
+        mineMethods.keySet().stream().filter(name -> !startMethods.containsKey(name) && !renamed.containsValue(name))
                 .forEach(name -> changes.add("dropped " + name + "()"));
         if (changes.isEmpty()) changes.add("matched its starting copy");
         try {

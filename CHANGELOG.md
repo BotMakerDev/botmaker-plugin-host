@@ -9,6 +9,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- A renamed parameter keeps its value (2026-11-04): `ParamsFitter` reads a rename rule in the group's starting copy,
+  `@Migrate(Group.class) static T old(@Migrate.Self Group self) { return self.renamed(); }`, and moves the old name's
+  body and time to the new name at the same type; `ParamsFitter.renameTarget` reads one.
 - `ParamValues.keptAt` (2026-11-04) reads the time a run wrote a value off its method, so a host can say a value's age.
 - A value's time (2026-11-04): `ParamValues.withReturned(…, Instant)` writes `@Param.Kept`, `ParamsFitter.fit` and
   `withValue` carry it with the body, a time alone never makes a fit, and `ParamsFitter.withStartingValue` takes the

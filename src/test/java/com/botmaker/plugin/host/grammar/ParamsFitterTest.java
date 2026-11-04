@@ -85,6 +85,30 @@ class ParamsFitterTest {
                 "a value over a dropped parameter is reset, never left not compiling: " + overMode);
     }
 
+    /** A rename rule in the starting copy moves the old name's value to the new name, at the same type only. */
+    @Test
+    void aRenameRuleKeepsTheValueUnderItsNewName() {
+        String rule = """
+                    @Migrate(RunChoices.class)
+                    static int tries(@Migrate.Self RunChoices self) { return self.attempts(); }
+
+                    @Migrate(RunChoices.class)
+                    static String account(@Migrate.Self RunChoices self) { return self.login(); }
+                """;
+        String starting = STARTING.replace("import java.time.Duration;",
+                        "import java.time.Duration;\nimport com.botmaker.plugin.api.meta.Migrate;")
+                .replace("public int tries()", "public int attempts()")
+                .replace("public String account() { return \"\"; }", "public long login() { return 0; }\n\n" + rule);
+
+        String fitted = flat(ParamsFitter.fit(starting, MINE));
+
+        assertTrue(fitted.contains("public int attempts() { return 3; }"), "moved by the rule: " + fitted);
+        assertTrue(fitted.contains("public long login() { return 0; }"), "a retype moves nothing: " + fitted);
+        assertFalse(fitted.contains("public int tries()") || fitted.contains("\"main\""), fitted);
+        assertEquals(List.of("renamed tries() to attempts()", "added login()", "dropped account()"),
+                ParamsFitter.over(Map.of(FILE, MINE), Map.of(FILE, starting)).getFirst().changes());
+    }
+
     /** The trees decide, so spacing never makes a difference and a value already there keeps its own text. */
     @Test
     void aBodyWrittenAlikeKeepsItsText() {
