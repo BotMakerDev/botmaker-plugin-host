@@ -62,11 +62,11 @@ class ParamsFitterTest {
         String mine = MINE.replace("public String account() { return \"main\"; }",
                 "public String account() { return \"main\"; }\n\n    public Mode mode() { return Mode.FAST; }");
 
-        String fitted = ParamsFitter.fit(starting, mine);
+        String fitted = flat(ParamsFitter.fit(starting, mine));
 
         assertTrue(fitted.contains("public int tries() { return 3; }"), "kept: " + fitted);
         assertTrue(fitted.contains("public long rest() { return 60; }"), "retyped, reset: " + fitted);
-        assertTrue(fitted.contains("\"Your account\")\n    public String account() { return \"main\"; }"),
+        assertTrue(fitted.contains("\"Your account\") public String account() { return \"main\"; }"),
                 "the starting copy's annotations, this computer's value: " + fitted);
         assertFalse(fitted.contains("mode()"), "not in the starting copy: " + fitted);
         assertFalse(fitted.contains("import com.refbot.Mode;"), "no kept value uses it: " + fitted);
@@ -85,6 +85,28 @@ class ParamsFitterTest {
                 "a value over a dropped parameter is reset, never left not compiling: " + overMode);
     }
 
+    /** The trees decide, so spacing never makes a difference and a value already there keeps its own text. */
+    @Test
+    void aBodyWrittenAlikeKeepsItsText() {
+        String spaced = STARTING.replace("return 3;", "return    3;");
+
+        assertEquals(STARTING, ParamsFitter.withValue(STARTING, spaced, "tries"), "the same value changes nothing");
+        assertEquals(spaced, ParamsFitter.fit(STARTING, spaced), "only spacing differs: this file already fits");
+    }
+
+    @Test
+    void aValueBringsItsImportAndKeepsTheOnesThere() {
+        String starting = STARTING.replace("Duration rest", "Mode rest").replace("Duration.ofMinutes(1)", "Mode.FAST");
+        String mine = MINE.replace("Duration rest", "Mode rest").replace("Duration.ofSeconds(5)", "Mode.REST");
+
+        String made = ParamsFitter.withValue(starting, mine, "rest");
+
+        assertEquals(made.indexOf("import com.refbot.Mode;"), made.lastIndexOf("import com.refbot.Mode;"), made);
+        assertTrue(made.contains("import com.refbot.Mode;"), made);
+        assertTrue(made.contains("return Mode.REST;"), made);
+        assertEquals(made, ParamsFitter.withValue(made, mine, "rest"), "written once, it is not written again");
+    }
+
     @Test
     void aMissingParameterIsAddedWithItsStartingValue(@TempDir Path bot) throws IOException {
         Path params = bot.resolve("src/main/java/com/refbot/params");
@@ -101,7 +123,7 @@ class ParamsFitterTest {
         List<ParamsFitter.Fitted> fitted = ParamsFitter.onDisk(params, starting, backups);
 
         assertEquals(3, fitted.size(), fitted.toString());
-        String now = Files.readString(params.resolve(FILE));
+        String now = flat(Files.readString(params.resolve(FILE)));
         assertTrue(now.contains("public String account() { return \"\"; }"), "added with its starting value: " + now);
         assertTrue(now.contains("public int tries() { return 3; }"), now);
         assertTrue(Files.exists(params.resolve("sdk/Sdk.java")), "a file the private copy lacks is copied");
@@ -127,6 +149,11 @@ class ParamsFitterTest {
         assertEquals(List.of(), ParamsFitter.onDisk(params, bot.resolve(ParamsFitter.STARTING), bot.resolve("b")),
                 "no starting copy at all: a bot loses no parameter");
         assertEquals(MINE, Files.readString(params.resolve(FILE)));
+    }
+
+    /** The rewrite lays out a body it copies: these tests read what is written, not how it is spaced. */
+    private static String flat(String source) {
+        return source.replaceAll("\\s+", " ");
     }
 
     private static void write(Path file, String text) throws IOException {

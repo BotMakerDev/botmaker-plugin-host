@@ -319,6 +319,14 @@ public final class ValueGrammar {
         return write(type, value, new ValueWriter.Names(false));
     }
 
+    /**
+     * {@link #spell} for a value that is data, such as what a run set: a {@code String} anywhere in it is text, so one
+     * under a type that would cross as the Java it is written as declines the whole value.
+     */
+    public Optional<JavaValue> spellData(Type type, Object value) {
+        return write(type, value, ValueWriter.Names.dataOnly());
+    }
+
     /** {@code value} written by its own runtime class, fully qualified — the untyped counterpart of {@link #valueOfAny}. */
     public Optional<JavaValue> initializerOfAny(Object value) {
         ValueWriter.Names names = new ValueWriter.Names(true);

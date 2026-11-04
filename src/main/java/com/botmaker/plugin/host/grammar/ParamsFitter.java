@@ -1,5 +1,7 @@
 package com.botmaker.plugin.host.grammar;
 
+import org.eclipse.jdt.core.dom.AST;
+import org.eclipse.jdt.core.dom.ASTMatcher;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.Annotation;
@@ -16,6 +18,11 @@ import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.SimpleType;
 import org.eclipse.jdt.core.dom.Type;
 import org.eclipse.jdt.core.dom.TypeDeclaration;
+import org.eclipse.jdt.core.dom.rewrite.ASTRewrite;
+import org.eclipse.jdt.core.dom.rewrite.ListRewrite;
+import org.eclipse.jface.text.BadLocationException;
+import org.eclipse.jface.text.Document;
+import org.eclipse.text.edits.MalformedTreeException;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -153,14 +160,8 @@ public final class ParamsFitter {
             return starting;
         }
         Block body = mine.getBody();
-        List<Splice> splices = new ArrayList<>(List.of(new Splice(start.getBody().getStartPosition(),
-                end(start.getBody()), params.substring(body.getStartPosition(), end(body)))));
-        String missing = missingImports(startUnit, mineUnit, namesIn(body));
-        if (!missing.isEmpty()) splices.add(new Splice(importsAt(startUnit), importsAt(startUnit), missing));
-        splices.sort(Comparator.comparingInt(Splice::start).reversed());
-        StringBuilder out = new StringBuilder(starting);
-        for (Splice each : splices) out.replace(each.start(), each.end(), each.text());
-        return out.toString();
+        if (start.getBody().subtreeMatch(new ASTMatcher(), body)) return starting;
+        return withBodies(starting, startUnit, Map.of(start, body), missingImports(startUnit, mineUnit, namesIn(body)));
     }
 
     /** Whether {@code unit} declares a top-level class marked {@code @Param}: a parameter group. */
@@ -184,19 +185,14 @@ public final class ParamsFitter {
 
     private record Fit(String source, List<String> changes) {}
 
-    /** One splice of the starting text: {@code [start, end)} becomes {@code text}. */
-    private record Splice(int start, int end, String text) {}
-
     private static Fit fitted(String starting, String params) {
         CompilationUnit startUnit = SourceParser.parse(starting);
         CompilationUnit mineUnit = SourceParser.parse(params);
         Map<String, MethodDeclaration> startMethods = parameters(startUnit);
         Map<String, MethodDeclaration> mineMethods = parameters(mineUnit);
-        if (frame(starting, startUnit, startMethods).equals(frame(params, mineUnit, mineMethods))) {
-            return new Fit(params, List.of());
-        }
+        if (sameFrame(startUnit, mineUnit, startMethods, mineMethods)) return new Fit(params, List.of());
         List<String> changes = new ArrayList<>();
-        List<Splice> splices = new ArrayList<>();
+        Map<MethodDeclaration, Block> kept = new LinkedHashMap<>();
         Set<String> usedByKept = new HashSet<>();
         Set<String> dropped = new HashSet<>(mineMethods.keySet());
         dropped.removeAll(startMethods.keySet());
@@ -208,39 +204,67 @@ public final class ParamsFitter {
                     || namesIn(mine.getBody()).stream().anyMatch(dropped::contains)) {
                 changes.add("reset " + name + "()");
             } else {
-                Block body = mine.getBody();
-                splices.add(new Splice(start.getBody().getStartPosition(), end(start.getBody()),
-                        params.substring(body.getStartPosition(), end(body))));
-                usedByKept.addAll(namesIn(body));
+                kept.put(start, mine.getBody());
+                usedByKept.addAll(namesIn(mine.getBody()));
             }
         });
         mineMethods.keySet().stream().filter(name -> !startMethods.containsKey(name))
                 .forEach(name -> changes.add("dropped " + name + "()"));
         if (changes.isEmpty()) changes.add("matched its starting copy");
-        String missing = missingImports(startUnit, mineUnit, usedByKept);
-        if (!missing.isEmpty()) splices.add(new Splice(importsAt(startUnit), importsAt(startUnit), missing));        splices.sort(Comparator.comparingInt(Splice::start).reversed());
-        StringBuilder out = new StringBuilder(starting);
-        for (Splice each : splices) out.replace(each.start(), each.end(), each.text());
-        return new Fit(out.toString(), changes);
+        try {
+            return new Fit(withBodies(starting, startUnit, kept, missingImports(startUnit, mineUnit, usedByKept)), changes);
+        } catch (IllegalStateException unwritable) {
+            return new Fit(params, List.of("could not be fitted: " + unwritable.getMessage()));
+        }
     }
 
     /**
-     * The file's text with its imports left out, each parameter's body emptied and every whitespace removed: two
-     * files of one frame differ only in their values.
+     * {@code source}, the text of {@code unit}, with each of {@code bodies}' methods given that body, copied as a tree
+     * from the other file, and {@code imports} added. A body already written alike keeps its text; a copied one is laid
+     * out by the rewrite, so a comment inside it does not follow.
+     *
+     * @throws IllegalStateException when the rewrite cannot be applied: never read as "nothing changed", which would
+     *         lose a value in silence
      */
-    private static String frame(String source, CompilationUnit unit, Map<String, MethodDeclaration> parameters) {
-        List<Splice> cuts = new ArrayList<>();
-        for (Object each : unit.imports()) {
-            ImportDeclaration imported = (ImportDeclaration) each;
-            cuts.add(new Splice(imported.getStartPosition(), end(imported), ""));
+    private static String withBodies(String source, CompilationUnit unit,
+                                     Map<MethodDeclaration, Block> bodies, List<ImportDeclaration> imports) {
+        AST ast = unit.getAST();
+        ASTRewrite rewrite = ASTRewrite.create(ast);
+        bodies.forEach((method, body) -> {
+            if (!method.getBody().subtreeMatch(new ASTMatcher(), body)) {
+                rewrite.replace(method.getBody(), ASTNode.copySubtree(ast, body), null);
+            }
+        });
+        ListRewrite list = rewrite.getListRewrite(unit, CompilationUnit.IMPORTS_PROPERTY);
+        for (ImportDeclaration imported : imports) list.insertLast(ASTNode.copySubtree(ast, imported), null);
+        Document document = new Document(source);
+        try {
+            rewrite.rewriteAST(document, SourceFormatter.rewriteOptions()).apply(document);
+        } catch (MalformedTreeException | BadLocationException | IllegalArgumentException unwritable) {
+            throw new IllegalStateException("the rewrite could not be applied", unwritable);
         }
-        for (MethodDeclaration method : parameters.values()) {
-            cuts.add(new Splice(method.getBody().getStartPosition(), end(method.getBody()), "{}"));
-        }
-        cuts.sort(Comparator.comparingInt(Splice::start).reversed());
-        StringBuilder out = new StringBuilder(source);
-        for (Splice each : cuts) out.replace(each.start(), each.end(), each.text());
-        return out.toString().replaceAll("\\s+", "");
+        return document.get();
+    }
+
+    /**
+     * Whether the two units differ only in their imports and their parameters' bodies, compared as trees: their values
+     * are all that differs. A comment outside a doc comment is not in the tree, so it never makes a fit.
+     */
+    private static boolean sameFrame(CompilationUnit starting, CompilationUnit params,
+                                     Map<String, MethodDeclaration> startMethods,
+                                     Map<String, MethodDeclaration> mineMethods) {
+        Set<Block> values = new HashSet<>();
+        startMethods.values().forEach(method -> values.add(method.getBody()));
+        mineMethods.values().forEach(method -> values.add(method.getBody()));
+        ASTMatcher frames = new ASTMatcher(true) {
+            @Override
+            public boolean match(Block node, Object other) {
+                return values.contains(node) && other instanceof Block body && values.contains(body)
+                        || super.match(node, other);
+            }
+        };
+        return frames.safeSubtreeMatch(starting.getPackage(), params.getPackage())
+                && frames.safeSubtreeListMatch(starting.types(), params.types());
     }
 
     /** Each parameter of the unit's group, by name: a non-static, non-private, no-argument method with a body. */
@@ -261,30 +285,28 @@ public final class ParamsFitter {
     }
 
     /**
-     * The imports of {@code mine} that {@code starting} lacks and a kept body may need, each on a line of its own
-     * after a line break: a single-type import whose simple name a kept body uses, and every on-demand one while any
-     * body is kept (which names it brings cannot be told from the text).
+     * The imports of {@code mine} that {@code starting} lacks and a kept body may need: a single-type import whose
+     * simple name a kept body uses, and every on-demand one while any body is kept (which names it brings cannot be
+     * told from the tree).
      */
-    private static String missingImports(CompilationUnit starting, CompilationUnit mine, Set<String> used) {
-        Set<String> present = new HashSet<>();
-        for (Object each : starting.imports()) present.add(each.toString().trim());
-        StringBuilder out = new StringBuilder();
+    private static List<ImportDeclaration> missingImports(CompilationUnit starting, CompilationUnit mine,
+                                                          Set<String> used) {
+        List<ImportDeclaration> out = new ArrayList<>();
         for (Object each : mine.imports()) {
             ImportDeclaration imported = (ImportDeclaration) each;
             String name = imported.getName().getFullyQualifiedName();
             boolean needed = imported.isOnDemand() ? !used.isEmpty()
                     : used.contains(name.substring(name.lastIndexOf('.') + 1));
-            if (!needed || present.contains(imported.toString().trim())) continue;
-            out.append('\n').append(imported.toString().trim());
+            if (needed && !imports(starting, imported)) out.add(imported);
         }
-        return out.toString();
+        return out;
     }
 
-    /** Where new import lines go: at the end of the last import, else of the package declaration. */
-    private static int importsAt(CompilationUnit unit) {
-        List<?> imports = unit.imports();
-        if (!imports.isEmpty()) return end((ImportDeclaration) imports.getLast());
-        return unit.getPackage() == null ? 0 : end(unit.getPackage());
+    private static boolean imports(CompilationUnit unit, ImportDeclaration wanted) {
+        for (Object each : unit.imports()) {
+            if (wanted.subtreeMatch(new ASTMatcher(), each)) return true;
+        }
+        return false;
     }
 
     private static Set<String> namesIn(Block body) {
@@ -297,10 +319,6 @@ public final class ParamsFitter {
             }
         });
         return out;
-    }
-
-    private static int end(ASTNode node) {
-        return node.getStartPosition() + node.getLength();
     }
 
     /** A type as its simple names spell it, so {@code java.time.Duration} and {@code Duration} are one shape. */

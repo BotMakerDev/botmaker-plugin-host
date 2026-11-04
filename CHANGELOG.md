@@ -7,8 +7,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- **`ParamsFitter` works on JDT trees** (2026-11-04): it compares units with `ASTMatcher` and writes through `ASTRewrite`
+  instead of splicing text. A copied value is laid out by the rewrite, so a comment inside it does not follow, and a
+  comment outside a doc comment no longer makes a file differ from its starting copy.
+
 ### Fixed
 
+- **`ValueGrammar.spellData` never reads text as Java** (2026-11-04): a value a run read off a game, under a type declared
+  with no component, is refused at any depth instead of written as the source it spells.
 - **Text under `Object` or `CharSequence` is written as a literal** (2026-11-04): `ValueWriter` read such a `String` as
   Java source, so text a run held could reach the bot's next compile as code.
 

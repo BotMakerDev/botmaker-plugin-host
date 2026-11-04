@@ -47,6 +47,8 @@ final class ValueWriter {
         private final boolean qualified;
         private final Set<String> imports = new LinkedHashSet<>();
         private final BotNames bot;
+        /** Whether a {@code String} is never taken for Java a type crosses as: the write of a run's own value. */
+        final boolean dataOnly;
 
         Names(boolean qualified) {
             this(qualified, BotNames.NONE);
@@ -54,8 +56,18 @@ final class ValueWriter {
 
         /** The same, writing a part one of the bot's {@code names} holds as that name. */
         Names(boolean qualified, BotNames bot) {
+            this(qualified, bot, false);
+        }
+
+        private Names(boolean qualified, BotNames bot, boolean dataOnly) {
             this.qualified = qualified;
             this.bot = bot == null ? BotNames.NONE : bot;
+            this.dataOnly = dataOnly;
+        }
+
+        /** Spelled by simple names, a {@code String} never read as Java. */
+        static Names dataOnly() {
+            return new Names(false, BotNames.NONE, true);
         }
 
         /** {@code value} as the bot's name for it, copied into this write's tree; empty when the bot has none. */
@@ -120,7 +132,9 @@ final class ValueWriter {
         if (isHostContainer(type)) return any(value, names);
         if (value instanceof String source && !type.isInstance(source)) {
             // A type declared with no component crosses as the Java it is written as: the SDK's CaptureSource. A type
-            // a String is itself, Object or CharSequence, holds text: never read that as Java (2026-11-04).
+            // a String is itself, Object or CharSequence, holds text: never read that as Java (2026-11-04). Nor is a
+            // String from a run, at any depth: it may be text read off a game.
+            if (names.dataOnly) return Optional.empty();
             return SourceNode.parse(source).map(node -> JavaValue.kept(node).copyInto(names.ast));
         }
         return type.isInstance(value) ? any(value, names) : Optional.empty();

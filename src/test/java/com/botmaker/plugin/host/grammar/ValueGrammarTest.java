@@ -236,6 +236,19 @@ class ValueGrammarTest {
         assertTrue(GRAMMAR.known(source));
     }
 
+    /** What a run read off a game is data: {@code spellData} never takes its text as Java, at any depth. */
+    @Test
+    void dataIsNeverSpelledAsItsSource() {
+        Type source = Source.class;
+        String java = "System.exit(0)";
+
+        assertTrue(GRAMMAR.spellData(source, java).isEmpty());
+        assertTrue(GRAMMAR.spellData(ValueTypes.listOf(source), List.of(java)).isEmpty());
+        assertTrue(GRAMMAR.spellData(ValueTypes.mapOf(TEXT, source), Map.of("k", java)).isEmpty());
+        assertEquals("\"" + java + "\"", GRAMMAR.spellData(TEXT, java).orElseThrow().source());
+        assertEquals("3", GRAMMAR.spellData(COUNT, 3).orElseThrow().source());
+    }
+
     /** Text under a type a String is, a run's value read off a game, is a string literal and never Java. */
     @Test
     void textUnderAnObjectIsALiteralAndNeverJava() {
