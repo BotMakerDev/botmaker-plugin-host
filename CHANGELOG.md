@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- `ParamValues.keptAt` (2026-11-04) reads the time a run wrote a value off its method, so a host can say a value's age.
 - A value's time (2026-11-04): `ParamValues.withReturned(…, Instant)` writes `@Param.Kept`, `ParamsFitter.fit` and
   `withValue` carry it with the body, a time alone never makes a fit, and `ParamsFitter.withStartingValue` takes the
   body without it, for a starting copy.

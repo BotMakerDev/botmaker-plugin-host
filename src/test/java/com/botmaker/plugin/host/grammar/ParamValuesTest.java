@@ -35,6 +35,16 @@ class ParamValuesTest {
     }
 
     @Test
+    void aValuesTimeIsReadOffItsMethod() {
+        String timed = GROUP.replace("public int level()", "@Param.Kept(at = \"2026-11-04T10:00:00Z\") public int level()");
+
+        assertEquals(Instant.parse("2026-11-04T10:00:00Z"), ParamValues.keptAt(timed, "Progress", "level").orElseThrow());
+        assertTrue(ParamValues.keptAt(GROUP, "Progress", "level").isEmpty(), "no run wrote it");
+        assertTrue(ParamValues.keptAt(timed.replace("2026-11-04T10:00:00Z", "soon"), "Progress", "level").isEmpty());
+        assertTrue(ParamValues.keptAt(timed, "Progress", "gone").isEmpty());
+    }
+
+    @Test
     void aValueReplacesWhatTheMethodReturnsAndBringsItsImports() {
         String out = ParamValues.withReturned(GROUP, "Progress", "level",
                 value("Duration.ZERO", "java.time.Duration", "java.lang.String")).orElseThrow();

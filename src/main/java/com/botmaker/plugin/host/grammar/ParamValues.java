@@ -21,6 +21,7 @@ import org.eclipse.text.edits.MalformedTreeException;
 import org.eclipse.text.edits.TextEdit;
 
 import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -86,6 +87,32 @@ public final class ParamValues {
             }
         }
         return out;
+    }
+
+    /**
+     * The time on {@code group}'s parameter {@code method}, {@code @Param.Kept}: when a run last wrote its value.
+     * Empty when it has none, or the source or the time does not read.
+     */
+    public static Optional<Instant> keptAt(String source, String group, String method) {
+        CompilationUnit unit = SourceParser.parse(source);
+        if (SourceParser.hasSyntaxErrors(unit)) return Optional.empty();
+        return declared(unit, group, method).map(ParamsFitter::keptOn)
+                .filter(NormalAnnotation.class::isInstance).map(NormalAnnotation.class::cast)
+                .flatMap(ParamValues::timeOf);
+    }
+
+    private static Optional<Instant> timeOf(NormalAnnotation kept) {
+        for (Object each : kept.values()) {
+            if (each instanceof MemberValuePair pair && pair.getName().getIdentifier().equals("at")
+                    && pair.getValue() instanceof StringLiteral time) {
+                try {
+                    return Optional.of(Instant.parse(time.getLiteralValue()));
+                } catch (DateTimeParseException garbled) {
+                    return Optional.empty();
+                }
+            }
+        }
+        return Optional.empty();
     }
 
     /** Whether {@code method} carries {@code @Param.Shown(changes = …DURING_RUN)}. */
