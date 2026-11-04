@@ -7,6 +7,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed (one parser)
+
+- `SourceParser` is the one entry from text to a tree (2026-11-04): a unit (`parse`), an expression, a type, a block of
+  statements, and a bound parser (`bound`) for a host's own batch. A fragment comes back only when it is well-formed
+  and whole, so `"not java"`, trailing text or a damaged statement is `null`, never a made-up tree. `JavaExpressions`
+  is removed; `SourceNode.parse` reads through it.
+- `BotAnnotation` moved here from Studio: `ParamValues` and `ParamsFitter` know `@Param`, `@Param.Shown`,
+  `@Param.Kept` and `@Migrate` by what the imports resolve to, so another library's `@Shown(changes = DURING_RUN)` or
+  `@Param` group is no parameter. `ParamValues.changesOf` and `ParamsFitter.isParameter` are the shared readings.
+- `ParamsFitter` compares a parameter's type by what its file's imports resolve it to: `a.Foo` against `b.Foo`
+  resets the value, an imported `Duration` and a written-whole `java.time.Duration` keep it.
+
 ### Added
 
 - A typed chain (2026-11-04): an instance-method factory whose receiver is another declared class, such as

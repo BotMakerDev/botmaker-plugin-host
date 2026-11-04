@@ -1,6 +1,5 @@
 package com.botmaker.plugin.host.grammar;
 
-import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.Expression;
 
 import java.util.Optional;
@@ -14,13 +13,9 @@ import java.util.Optional;
  */
 public record SourceNode(Expression node, String text) {
 
-    /** {@code source} parsed as exactly one expression, or empty. */
+    /** {@code source} parsed as exactly one expression ({@link SourceParser#expression}), with its text, or empty. */
     public static Optional<SourceNode> parse(String source) {
-        if (source == null || source.isBlank()) return Optional.empty();
-        Expression node = JavaExpressions.parse(source);
-        if (node == null || (node.getFlags() & (ASTNode.MALFORMED | ASTNode.RECOVERED)) != 0) return Optional.empty();
-        if (node.getLength() != source.strip().length()) return Optional.empty();
-        return Optional.of(new SourceNode(node, source));
+        return Optional.ofNullable(SourceParser.expression(source)).map(node -> new SourceNode(node, source));
     }
 
     /** The node's own slice of {@link #text}, as it was written. */

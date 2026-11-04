@@ -9,8 +9,11 @@ import org.eclipse.jdt.core.dom.Expression;
 import org.eclipse.jdt.core.dom.ImportDeclaration;
 import org.eclipse.jdt.core.dom.MemberValuePair;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
+import org.eclipse.jdt.core.dom.Name;
 import org.eclipse.jdt.core.dom.NormalAnnotation;
+import org.eclipse.jdt.core.dom.QualifiedName;
 import org.eclipse.jdt.core.dom.ReturnStatement;
+import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.StringLiteral;
 import org.eclipse.jdt.core.dom.TypeDeclaration;
 import org.eclipse.jdt.core.dom.rewrite.ASTRewrite;
@@ -115,22 +118,29 @@ public final class ParamValues {
         return Optional.empty();
     }
 
-    /** Whether {@code method} carries {@code @Param.Shown(changes = …DURING_RUN)}. */
     private static boolean changesDuringRun(MethodDeclaration method) {
-        for (Object modifier : method.modifiers()) {
-            if (!(modifier instanceof Annotation annotation) || !annotation.isNormalAnnotation()) continue;
-            String name = annotation.getTypeName().getFullyQualifiedName();
-            if (!name.equals("Shown") && !name.endsWith(".Shown")) continue;
-            for (Object each : ((NormalAnnotation) annotation).values()) {
-                MemberValuePair pair = (MemberValuePair) each;
-                String constant = pair.getValue().toString();
-                if (pair.getName().getIdentifier().equals("changes")
-                        && constant.substring(constant.lastIndexOf('.') + 1).equals(Param.Changes.DURING_RUN.name())) {
-                    return true;
-                }
+        return changesOf(method) == Param.Changes.DURING_RUN;
+    }
+
+    /**
+     * When the parameter {@code method} changes, as the contract's {@code @Param.Shown(changes = …)} on it says, read
+     * by the constant's name; outside a run without one. Another library's {@code @Shown} says nothing.
+     */
+    public static Param.Changes changesOf(MethodDeclaration method) {
+        if (!(BotAnnotation.PARAM_SHOWN.on(method) instanceof NormalAnnotation shown)) return Param.Changes.OUTSIDE_RUN;
+        for (Object each : shown.values()) {
+            MemberValuePair pair = (MemberValuePair) each;
+            if (pair.getName().getIdentifier().equals("changes") && pair.getValue() instanceof Name constant) {
+                return Param.Changes.fromId(identifier(constant));
             }
         }
-        return false;
+        return Param.Changes.OUTSIDE_RUN;
+    }
+
+    /** The last identifier of {@code name}: {@code DURING_RUN} of {@code Param.Changes.DURING_RUN}. */
+    private static String identifier(Name name) {
+        return name instanceof QualifiedName qualified ? qualified.getName().getIdentifier()
+                : ((SimpleName) name).getIdentifier();
     }
 
     /** {@code group}'s parameter {@code method}. */
@@ -172,13 +182,8 @@ public final class ParamValues {
     }
 
     private static String paramSpelling(TypeDeclaration group) {
-        for (Object modifier : group.modifiers()) {
-            if (modifier instanceof Annotation annotation) {
-                String name = annotation.getTypeName().getFullyQualifiedName();
-                if (name.equals("Param") || name.endsWith(".Param")) return name;
-            }
-        }
-        return "Param";
+        Annotation param = BotAnnotation.PARAM.on(group);
+        return param == null ? "Param" : param.getTypeName().getFullyQualifiedName();
     }
 
     private static void addImports(CompilationUnit unit, ASTRewrite rewrite, List<String> imports) {

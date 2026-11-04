@@ -70,6 +70,17 @@ class ParamValuesTest {
         assertTrue(out.contains("return 3;"), out);
     }
 
+    /** Another library's {@code @Param.Shown} says nothing about when a value changes (doc 36). */
+    @Test
+    void aForeignShownIsNoDuringARunMark() {
+        String foreign = GROUP.replace("import com.botmaker.plugin.api.params.Param;", "import other.lib.Param;");
+        String disk = foreign.replace("return 1;", "return 7;");
+
+        assertEquals(foreign, ParamValues.withRunsValues(foreign, foreign, disk), "the run's value is not taken");
+        assertTrue(ParamValues.withRunsValues(GROUP, GROUP, GROUP.replace("return 1;", "return 7;"))
+                .contains("return 7;"), "the contract's own mark is");
+    }
+
     @Test
     void aDuringARunValueTheRunLeftAloneStaysAsThePersonEditedIt() {
         String held = GROUP.replace("return 1;", "return 4;");

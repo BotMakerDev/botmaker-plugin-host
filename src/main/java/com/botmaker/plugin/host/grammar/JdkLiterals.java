@@ -23,7 +23,7 @@ import java.util.Optional;
  * a suffix, an underscore or an escape. Every plugin parsed the text it was handed; now none does, and this
  * is the whole of the host's answer.
  *
- * <p>Reading uses a real parser — {@link JavaExpressions} — so {@code 0x1F}, {@code 1_000}, {@code 3L},
+ * <p>Reading uses a real parser — {@link SourceParser} — so {@code 0x1F}, {@code 1_000}, {@code 3L},
  * {@code '\n'} and {@code "a\"b"} mean what javac says they mean. Writing is by hand and canonical: one
  * spelling per value, so a value read and written back without an edit is the same text it was.
  */

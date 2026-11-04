@@ -109,6 +109,26 @@ class ParamsFitterTest {
                 ParamsFitter.over(Map.of(FILE, MINE), Map.of(FILE, starting)).getFirst().changes());
     }
 
+    /** A type is what its imports resolve to: {@code a.Foo} is not {@code b.Foo}, an import is its whole name. */
+    @Test
+    void typesAreComparedByWhatTheyResolveTo() {
+        String starting = STARTING.replace("import java.time.Duration;", "import java.time.Duration;\nimport a.Foo;")
+                .replace("public String account() { return \"\"; }", "public Foo kind() { return Foo.X; }");
+        String mine = MINE.replace("import java.time.Duration;", "import java.time.Duration;\nimport b.Foo;")
+                .replace("public String account() { return \"main\"; }", "public Foo kind() { return Foo.Y; }");
+
+        String fitted = flat(ParamsFitter.fit(starting, mine));
+        assertTrue(fitted.contains("public Foo kind() { return Foo.X; }"), "another Foo is reset: " + fitted);
+        String onDemand = flat(ParamsFitter.fit(starting, mine.replace("import b.Foo;", "import b.*;")));
+        assertTrue(onDemand.contains("return Foo.X;"), "nor is b.*'s Foo a.Foo: " + onDemand);
+        String same = flat(ParamsFitter.fit(starting, mine.replace("import b.Foo;", "import a.*;")));
+        assertTrue(same.contains("return Foo.Y;"), "a.*'s Foo is: " + same);
+
+        String whole = MINE.replace("public Duration rest()", "public java.time.Duration rest()");
+        assertTrue(flat(ParamsFitter.fit(STARTING, whole)).contains("return Duration.ofSeconds(5);"),
+                "an imported Duration and one written whole are one type: " + ParamsFitter.fit(STARTING, whole));
+    }
+
     /** The trees decide, so spacing never makes a difference and a value already there keeps its own text. */
     @Test
     void aBodyWrittenAlikeKeepsItsText() {
@@ -163,7 +183,7 @@ class ParamsFitterTest {
         Path backups = bot.resolve(".botmaker/values-removed");
         String mine = MINE.replace("\n    public String account() { return \"main\"; }\n", "");
         write(params.resolve(FILE), mine);
-        write(params.resolve("sdk/Gone.java"), "package com.refbot.params.sdk;\n@Param\npublic class Gone {}\n");
+        write(params.resolve("sdk/Gone.java"), "package com.refbot.params.sdk;\nimport com.botmaker.plugin.api.params.Param;\n@Param\npublic class Gone {}\n");
         String fields = "package com.refbot.params;\npublic final class Parameters {\n    @Param public static int a = 1;\n}\n";
         write(params.resolve("Parameters.java"), fields);
         write(starting.resolve(FILE), STARTING);

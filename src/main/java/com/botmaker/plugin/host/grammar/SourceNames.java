@@ -50,7 +50,7 @@ public final class SourceNames {
         String simple = ((SimpleName) written).getIdentifier();
         if (!own.equals(simple)) return false;
         CompilationUnit unit = written.getRoot() instanceof CompilationUnit root ? root : null;
-        if (unit == null || JavaExpressions.detached(written)) return true;
+        if (unit == null || SourceParser.detached(written)) return true;
         // A member type is in scope inside the type that declares it, and inside every type nested in that one.
         for (ASTNode parent = written.getParent(); parent != null; parent = parent.getParent()) {
             if (parent instanceof AbstractTypeDeclaration enclosing && canonicalOf(enclosing).equals(owner)) {
