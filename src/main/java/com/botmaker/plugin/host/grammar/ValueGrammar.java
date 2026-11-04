@@ -135,7 +135,9 @@ public final class ValueGrammar {
      * {@code component} as the reader sees it, and — when its factory is not a chain on part 0 — as one the
      * writer writes that class with, in declaration order: the first is the class's {@link #canonical}, and
      * {@link #writerOf} picks among them by {@code ComponentType.writes}. A chain on part 0 is kept for the
-     * writer too, as the way to write a value that one would lose part of.
+     * writer too, as the way to write a value that one would lose part of. An instance factory of another class
+     * ({@code Gauge.of("gold").atLeast(5)} building a {@code Limit}) is no such chain: its receiver is a value of
+     * its own, so it writes the class like a static factory does (2026-11-04).
      */
     private static void register(ComponentType<?> component, Class<?> cls,
                                  Map<String, List<ComponentType<?>>> writers,
@@ -144,7 +146,7 @@ public final class ValueGrammar {
         if (factory.isEmpty()) return;
         calls.add(new ExpressionReader.Call(component, factory.get()));
         String name = JavaNames.canonical(cls);
-        if (factory.get().kind() != Factory.Kind.RECEIVER) {
+        if (factory.get().kind() != Factory.Kind.RECEIVER || !factory.get().owner().isAssignableFrom(cls)) {
             writers.computeIfAbsent(name, n -> new ArrayList<>()).add(component);
         } else {
             chains.computeIfAbsent(name, n -> new ArrayList<>()).add(component);

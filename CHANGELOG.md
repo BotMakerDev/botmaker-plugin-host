@@ -9,6 +9,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- A typed chain (2026-11-04): an instance-method factory whose receiver is another declared class, such as
+  `When::atLeast` writing a `Test`, is written as its receiver's own call followed by the link,
+  `Params.when(Progress::gold).atLeast(5)`, and read back the same way (`TypedChainTest`). A receiver nothing
+  declares leaves the call unwritten and unread.
 - A renamed parameter keeps its value (2026-11-04): `ParamsFitter` reads a rename rule in the group's starting copy,
   `@Migrate(Group.class) static T old(@Migrate.Self Group self) { return self.renamed(); }`, and moves the old name's
   body and time to the new name at the same type; `ParamsFitter.renameTarget` reads one.

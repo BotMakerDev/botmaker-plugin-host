@@ -294,11 +294,17 @@ final class ValueWriter {
         return named.isPresent() ? named : factoryWritten(component, type, value, names);
     }
 
-    /** {@code component}'s own factory over {@code value}'s factory parts — a wither's are {@link #linked}'s. */
+    /**
+     * {@code component}'s own factory over {@code value}'s factory parts — a wither's are {@link #linked}'s. An
+     * instance factory of another class is written on part 0, its receiver, written as a value of its own:
+     * {@code Gauge.of("gold").atLeast(5)}. One of the value's own class is a chain, {@link #chained}'s.
+     */
     private Optional<Expression> factoryWritten(ComponentType<?> component, Class<?> type, Object value,
                                                 Names names) {
         Optional<Factory> factory = Factory.of(component);
-        if (factory.isEmpty() || factory.get().kind() == Factory.Kind.RECEIVER) return Optional.empty();
+        if (factory.isEmpty()) return Optional.empty();
+        boolean receiver = factory.get().kind() == Factory.Kind.RECEIVER;
+        if (receiver && factory.get().owner().isAssignableFrom(type)) return Optional.empty();
         List<Object> parts;
         try {
             parts = component.componentsOf(value);
@@ -320,6 +326,21 @@ final class ValueWriter {
             arguments = list;
             if (!fill(arguments, declared, parts, names)) return Optional.empty();
             return Optional.of(creation);
+        }
+        if (receiver) {
+            if (parts.isEmpty()) return Optional.empty();
+            Optional<Expression> on = ofClass(factory.get().owner(), parts.getFirst(), names);
+            if (on.isEmpty()) return Optional.empty();
+            MethodInvocation link = names.ast.newMethodInvocation();
+            link.setExpression(on.get());
+            link.setName(names.ast.newSimpleName(factory.get().name()));
+            for (int i = 1; i < parts.size(); i++) {
+                Optional<Expression> part = ofClass(ValueGrammar.partType(declared, i, parts.size()), parts.get(i),
+                        names);
+                if (part.isEmpty()) return Optional.empty();
+                arguments(link).add(part.get());
+            }
+            return Optional.of(link);
         }
         MethodInvocation invocation = factoryCall(factory.get(), names);
         arguments = arguments(invocation);

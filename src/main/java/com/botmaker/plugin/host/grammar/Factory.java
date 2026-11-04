@@ -32,7 +32,10 @@ public record Factory(Executable executable) {
         CONSTRUCTOR,
         /** {@code Owner.name(p₁, …)}. */
         STATIC,
-        /** {@code part₀.name(p₁, …)}: read; written only where the owning factory would lose part of a value. */
+        /**
+         * {@code part₀.name(p₁, …)}: read. Of the value's own class, written only where its owning factory would
+         * lose part of a value; of another declared class, a typed chain, written on part 0 like a static factory.
+         */
         RECEIVER
     }
 
