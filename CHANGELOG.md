@@ -5,6 +5,79 @@ All notable changes to `botmaker-plugin-host`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
+## [Unreleased]
+
+No source changes since v0.11.0; re-released for updated upstream pins.
+
+### Changed (botmaker-java)
+
+- The value grammar and `SourceParser` left for `botmaker-java` (2026-11-04): `com.botmaker.plugin.host.grammar` is now
+  `com.botmaker.java.grammar`. `ClasspathGrammar` stays here and needs `botmaker-java`, an `optional` dependency in place
+  of JDT: a host that calls it declares that module itself.
+
+### Changed (one parser)
+
+- `SourceParser` is the one entry from text to a tree (2026-11-04): a unit (`parse`), an expression, a type, a block of
+  statements, and a bound parser (`bound`) for a host's own batch. A fragment comes back only when it is well-formed
+  and whole, so `"not java"`, trailing text or a damaged statement is `null`, never a made-up tree. `JavaExpressions`
+  is removed; `SourceNode.parse` reads through it.
+- `BotAnnotation` moved here from Studio: `ParamValues` and `ParamsFitter` know `@Param`, `@Param.Shown`,
+  `@Param.Kept` and `@Migrate` by what the imports resolve to, so another library's `@Shown(changes = DURING_RUN)` or
+  `@Param` group is no parameter. `ParamValues.changesOf` and `ParamsFitter.isParameter` are the shared readings.
+- `ParamsFitter` compares a parameter's type by what its file's imports resolve it to: `a.Foo` against `b.Foo`
+  resets the value, an imported `Duration` and a written-whole `java.time.Duration` keep it.
+
+### Added
+
+- A typed chain (2026-11-04): an instance-method factory whose receiver is another declared class, such as
+  `When::atLeast` writing a `Test`, is written as its receiver's own call followed by the link,
+  `Params.when(Progress::gold).atLeast(5)`, and read back the same way (`TypedChainTest`). A receiver nothing
+  declares leaves the call unwritten and unread.
+- A renamed parameter keeps its value (2026-11-04): `ParamsFitter` reads a rename rule in the group's starting copy,
+  `@Migrate(Group.class) static T old(@Migrate.Self Group self) { return self.renamed(); }`, and moves the old name's
+  body and time to the new name at the same type; `ParamsFitter.renameTarget` reads one.
+- `ParamValues.keptAt` (2026-11-04) reads the time a run wrote a value off its method, so a host can say a value's age.
+- A value's time (2026-11-04): `ParamValues.withReturned(…, Instant)` writes `@Param.Kept`, `ParamsFitter.fit` and
+  `withValue` carry it with the body, a time alone never makes a fit, and `ParamsFitter.withStartingValue` takes the
+  body without it, for a starting copy.
+
+### Changed
+
+- **`ParamsFitter` works on JDT trees** (2026-11-04): it compares units with `ASTMatcher` and writes through `ASTRewrite`
+  instead of splicing text. A copied value is laid out by the rewrite, so a comment inside it does not follow, and a
+  comment outside a doc comment no longer makes a file differ from its starting copy.
+
+### Fixed
+
+- **`ValueGrammar.spellData` never reads text as Java** (2026-11-04): a value a run read off a game, under a type declared
+  with no component, is refused at any depth instead of written as the source it spells.
+- **Text under `Object` or `CharSequence` is written as a literal** (2026-11-04): `ValueWriter` read such a `String` as
+  Java source, so text a run held could reach the bot's next compile as code.
+
+### Added
+
+- **`ParamValues` and `ClasspathGrammar`** (2026-11-04): one parameter's value written into its group's source, a
+  during-a-run value taken from disk into a host's copy, and the grammar of a process on its plugins' own classpath,
+  for a running bot.
+- **The value grammar** (`com.botmaker.plugin.host.grammar`, 2026-11-04): `ValueGrammar`, its reader and writer,
+  `SourceParser` and `SourceFormatter`, moved unchanged from Studio's `plugin/grammar` and `parser/helpers` so every
+  host reads and writes a bot's values the same way. This module now depends on JDT (`org.eclipse.jdt.core`
+  3.47.0, Studio's pin). Once the SDK depends on it too (private-values plan, phase 4), a host release forces sdk.
+- **`ParamsFitter`** (2026-11-04): fits a bot's private `params/` files to their copies in `starting-params/` — each
+  file becomes its starting copy with this computer's method bodies: a parameter the starting copy lacks is dropped,
+  one retyped is reset to its starting value, one added is added, a file whose starting copy is gone is deleted and
+  one only the starting copy has is copied. Nothing is decided while a source does not parse or with no
+  `starting-params/` folder; each file changed is backed up at its relative path. `fit(starting, params)` on two
+  texts, `over` on two maps, `onDisk(paramsRoot, startingRoot, backups)` on disk. A private file is deleted only
+  when it is a `@Param` group (`isGroup`), so an old tracked field class in `params/` is left alone.
+  `withValue(starting, params, name)` copies one parameter's value into the other text, with the imports it needs
+  (*Make this the starting value*, Forget).
+
+### Fixed
+
+- **A string with four or more quotes in a row is written as a text block that still parses** (2026-11-04): the
+  third quote of every run is escaped, not only a whole `"""`, which left a fourth quote to close the block.
+
 ## [0.11.0] — 2026-11-10
 
 ### Changed (botmaker-java)
