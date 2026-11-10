@@ -5,7 +5,7 @@ All notable changes to `botmaker-plugin-host`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
-## [Unreleased]
+## [0.12.0] — 2026-11-10
 
 No source changes since v0.11.0; re-released for updated upstream pins.
 
@@ -46,6 +46,8 @@ No source changes since v0.11.0; re-released for updated upstream pins.
 - **`ParamsFitter` works on JDT trees** (2026-11-04): it compares units with `ASTMatcher` and writes through `ASTRewrite`
   instead of splicing text. A copied value is laid out by the rewrite, so a comment inside it does not follow, and a
   comment outside a doc comment no longer makes a file differ from its starting copy.
+- Built against botmaker-studio-api 0.17.0 (was 0.15.0).
+- Built against botmaker-java 0.2.0 (was 0.1.0).
 
 ### Fixed
 
