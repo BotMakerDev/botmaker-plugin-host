@@ -5,6 +5,15 @@ All notable changes to `botmaker-plugin-host`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
+## [Unreleased]
+
+### Added
+
+- **`RunHostFolders`** (2026-11-15): a run's half of a plugin's values of this PC, serving the contract's
+  `RunHostValues` from the folder the core names. It answers only the jar that holds the value's marker, reads the
+  marked method's value through the grammar, and rewrites it in place under the folder's `.lock`, committing and
+  compiling nothing.
+
 ## [0.12.1] — 2026-11-13
 
 ### Changed

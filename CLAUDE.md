@@ -54,7 +54,9 @@ copies.
 ## The one rule
 
 **Nothing in this module may name a type outside `com.botmaker.plugin.api` and the JDK** — with two exceptions.
-`com.botmaker.java.grammar` inside `ClasspathGrammar`, which builds the value grammar from a classpath's plugin poms.
+`com.botmaker.java.grammar` inside `ClasspathGrammar`, which builds the value grammar from a classpath's plugin poms,
+and inside `RunHostFolders` (2026-11-15), a run's half of a plugin's values of this PC, which the run's agent builds on
+the bot's own loader.
 The grammar itself moved to `botmaker-java` on 2026-11-04 (umbrella plan `2026-11-04-java-and-core.md`); that module is
 `optional` here, so reason 1 below still holds: a host that only loads plugins downloads no JDT, and a host that
 calls `ClasspathGrammar` declares `botmaker-java` itself. And `maven-model` inside `PluginPoms` (2026-10-27, the user's call: the parser Studio and the CLI already read poms
