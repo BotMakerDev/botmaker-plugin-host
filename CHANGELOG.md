@@ -5,7 +5,7 @@ All notable changes to `botmaker-plugin-host`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
-## [Unreleased]
+## [0.13.0] — 2026-11-16
 
 ### Added
 
@@ -13,6 +13,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   `RunHostValues` from the folder the core names. It answers only the jar that holds the value's marker, reads the
   marked method's value through the grammar, and rewrites it in place under the folder's `.lock`, committing and
   compiling nothing.
+
+### Changed
+
+- Built against botmaker-studio-api 0.18.0 (was 0.17.1).
+- Built against botmaker-java 0.3.0 (was 0.2.1).
 
 ## [0.12.1] — 2026-11-13
 
