@@ -108,4 +108,4 @@ holding is what has **no visible symptom when it is wrong**: the parent-first ru
 plugins answering for the same classes.
 
 Published through JitPack. **The maintainer owns the publish** — releases are cut from the umbrella with
-`../release.sh --plugin-host <version>`.
+`sluice --plugin-host <version>`.
