@@ -5,6 +5,13 @@ All notable changes to `botmaker-plugin-host`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
+## [0.14.1] — 2026-11-22
+
+### Changed
+
+- Built against botmaker-studio-api 0.19.1 (was 0.19.0).
+- Built against botmaker-java 0.4.1 (was 0.4.0).
+
 ## [0.14.0] — 2026-11-21
 
 ### Changed
