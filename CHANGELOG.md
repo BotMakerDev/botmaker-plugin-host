@@ -5,6 +5,13 @@ All notable changes to `botmaker-plugin-host`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this module uses
 [semantic versioning](https://semver.org/). `release.sh` refuses to cut a version with no section here.
 
+## [Unreleased]
+
+### Changed
+
+- A run's write of a value its plugin's class of this PC lacks is refused with what to do about it: reload the
+  project's plugins, or restart BotMaker's core.
+
 ## [0.14.2] — 2026-11-24
 
 ### Changed

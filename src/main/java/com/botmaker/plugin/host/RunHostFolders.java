@@ -124,7 +124,11 @@ public final class RunHostFolders implements RunHostValues.Service {
                 Optional<String> written = MarkedReturns.withReturned(JavaLevel.running(), source, value.holder(),
                         markerName(value), constant(value), spelled.get());
                 if (written.isEmpty()) {
-                    return Optional.of(file.getFileName() + " has no " + constant(value) + " that returns one value.");
+                    // Most often the host loaded a build of the plugin from before the value, so it did not add it.
+                    return Optional.of(file.getFileName() + " has no " + constant(value) + " that returns one value."
+                            + " Unless it was edited by hand, BotMaker had loaded another build of the plugin when it"
+                            + " started this run: reload the project's plugins, or restart BotMaker's core, and run"
+                            + " again.");
                 }
                 if (!written.get().equals(source)) writeAtomically(file, written.get());
                 return Optional.empty();

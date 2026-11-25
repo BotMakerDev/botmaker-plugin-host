@@ -97,6 +97,20 @@ class RunHostFoldersTest {
         assertEquals(newer, Files.readString(file), "a newer version's value is never replaced by a start");
     }
 
+    /** The core that started the run had loaded a plugin from before the value: the refusal says what to do. */
+    @Test
+    void aValueTheClassLacksIsRefusedWithWhatToDo(@TempDir Path root) throws IOException {
+        Path file = seeded(root);
+        String before = RUNS.replaceAll("(?m)^ {4}.*\\n", "");
+        Files.writeString(file, before);
+
+        String refused = folders(root).update(RunHostFoldersTest.class, DONE, kept -> "x").orElseThrow();
+
+        assertTrue(refused.contains("has no DONE"), refused);
+        assertTrue(refused.contains("restart BotMaker's core"), refused);
+        assertEquals(before, Files.readString(file));
+    }
+
     @Test
     void aClassNotOnThisPcYetIsRefusedWithWhy(@TempDir Path root) {
         RunHostFolders folders = folders(root);
